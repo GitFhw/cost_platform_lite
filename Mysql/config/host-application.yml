@@ -1,0 +1,15 @@
+cost:
+  lite:
+    integration:
+      enabled: ${COST_LITE_ENABLED:true}
+      base-url: ${COST_LITE_BASE_URL:http://127.0.0.1:18080}
+      admin-token: ${COST_LITE_ADMIN_TOKEN:}
+      open-token: ${COST_LITE_OPEN_TOKEN:}
+      web-path: /cost-lite
+      proxy-enabled: true
+      connect-timeout: ${COST_LITE_CONNECT_TIMEOUT:5000}
+      read-timeout: ${COST_LITE_READ_TIMEOUT:30000}
+      max-retries: ${COST_LITE_MAX_RETRIES:0}
+      retry-backoff: ${COST_LITE_RETRY_BACKOFF:200}
+      max-response-bytes: ${COST_LITE_MAX_RESPONSE_BYTES:20971520}
+      response-mode: status

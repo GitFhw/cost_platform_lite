@@ -1,0 +1,21 @@
+{
+  "name": "@costplatform/cost-lite-ui",
+  "version": "1.0.0",
+  "description": "Framework-light Vue 3 workbench for the lightweight billing platform",
+  "type": "module",
+  "sideEffects": [
+    "*.vue"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@element-plus/icons-vue": ">=2.3.0",
+    "element-plus": ">=2.8.0",
+    "vue": ">=3.3.0"
+  }
+}

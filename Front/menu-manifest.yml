@@ -1,0 +1,11 @@
+name: 轻量计费
+route: /cost/lite
+icon: carbon:calculator
+frontendApiPrefix: /business/cost-lite
+businessServiceWebPath: /cost-lite
+menu:
+  rootId: cost-lite-root
+  pageId: cost-lite-workbench
+  rootParentId: "-3"
+  rootType: "2"
+  pageType: "1"

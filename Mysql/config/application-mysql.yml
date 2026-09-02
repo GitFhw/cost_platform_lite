@@ -1,0 +1,13 @@
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    driver-class-name: ${COST_LITE_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+    url: ${COST_LITE_DB_URL:jdbc:mysql://127.0.0.1:3306/cost_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${COST_LITE_DB_USERNAME:root}
+    password: ${COST_LITE_DB_PASSWORD:}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
