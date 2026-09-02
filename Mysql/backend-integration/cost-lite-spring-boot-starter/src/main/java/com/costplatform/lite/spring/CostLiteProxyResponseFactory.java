@@ -6,12 +6,18 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.math.BigInteger;
 
 /**
  * 把母体服务的 RuoYi 风格响应归一为宿主前端常用的 status/error/statusText/data 结构。
  */
 public class CostLiteProxyResponseFactory {
+    private static final BigInteger MAX_SAFE_INTEGER = BigInteger.valueOf(9_007_199_254_740_991L);
+
     private final ObjectMapper objectMapper;
     private final CostLiteSpringProperties properties;
 
@@ -80,7 +86,42 @@ public class CostLiteProxyResponseFactory {
     }
 
     private Object toObject(JsonNode node) {
-        return node == null || node.isNull() ? null : objectMapper.convertValue(node, Object.class);
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (node.isObject()) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                result.put(field.getKey(), toObject(field.getValue()));
+            }
+            return result;
+        }
+        if (node.isArray()) {
+            List<Object> result = new ArrayList<>();
+            for (JsonNode item : node) {
+                result.add(toObject(item));
+            }
+            return result;
+        }
+        if (node.isIntegralNumber()) {
+            BigInteger value = node.bigIntegerValue();
+            if (value.compareTo(MAX_SAFE_INTEGER) > 0 || value.compareTo(MAX_SAFE_INTEGER.negate()) < 0) {
+                return value.toString();
+            }
+            return node.canConvertToInt() ? node.intValue() : node.longValue();
+        }
+        if (node.isFloatingPointNumber()) {
+            return node.numberValue();
+        }
+        if (node.isBoolean()) {
+            return node.booleanValue();
+        }
+        if (node.isTextual()) {
+            return node.textValue();
+        }
+        return objectMapper.convertValue(node, Object.class);
     }
 
     private String messageOf(Throwable throwable) {

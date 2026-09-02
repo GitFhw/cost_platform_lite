@@ -16,6 +16,11 @@
 
 当前没有独立公式维护页面。规则可以选择运行端已有公式或填写表达式，公式页面后续可作为独立模块增加。
 
+后端支持两种等价部署入口：
+
+- `proxy`：宿主引入 Spring Boot Starter，前端调用稳定的 `/cost-lite/**` 协议。
+- `runtime`：前端直接调用独立 Jar 暴露的母体兼容路径，前端业务组件不变。
+
 ## 2. 前置条件
 
 - Vue 3.3+。
@@ -61,15 +66,37 @@ const costLiteApi = createCostLiteApi(
 
 已有 AG Vue 3 项目的实际包装示例见 `Front/examples/ag-vue3-page.vue`。
 
+如果业务服务不引入 Starter，而是由独立 Jar 直接提供计费接口，使用同一个工作台只需切换路由模式：
+
+```ts
+const costLiteApi = createCostLiteApi(
+  (config) => request(config),
+  {
+    basePath: "/cost",
+    routeMode: "runtime",
+  },
+);
+```
+
 ## 5. 确定 `basePath`
 
-| 部署方式 | 示例 |
-| --- | --- |
-| 浏览器直连业务服务 | `/cost-lite` |
-| 网关按服务名转发 | `/business/cost-lite` |
-| 网关统一 API 前缀 | `/api/business/cost-lite` |
+| 路由模式 | 部署方式 | `basePath` 示例 |
+| --- | --- | --- |
+| `proxy` | 浏览器直连业务服务 | `/cost-lite` |
+| `proxy` | 网关按服务名转发 | `/business/cost-lite` |
+| `proxy` | 网关统一 API 前缀 | `/api/business/cost-lite` |
+| `runtime` | 独立 Jar 直连或由网关转发 | `/cost` |
 
-`basePath` 必须是浏览器实际访问的宿主代理路径，不能填写独立计费 Jar 地址。Jar 地址只保存在后端配置中。
+`basePath` 始终填写浏览器实际访问的路径，不填写 `http://host:port` 形式的 Jar 地址。独立 Jar 的真实路由由 `runtime` 模式集中转换，调用方不用手工维护场景、费目、要素、规则等接口地址。
+
+如果独立 Jar 被网关挂在 `/business/cost`，仍然只改 `basePath`：
+
+```ts
+{
+  basePath: "/business/cost",
+  routeMode: "runtime",
+}
+```
 
 ## 6. 请求适配要求
 
@@ -101,7 +128,7 @@ interface CostLiteRequest {
 
 ## 8. 权限
 
-前端菜单权限只控制入口展示，后端必须继续保护 `/cost-lite/**`。
+前端菜单权限只控制入口展示，后端必须继续保护 Starter 的 `/cost-lite/**` 或独立 Jar 的 `/cost/**` 管理路径。
 
 推荐最小角色：
 

@@ -208,8 +208,31 @@ cost:
 菜单名称：轻量计费
 页面路由：/cost/lite
 组件路径：项目内的 Cost Lite 页面包装组件
-接口前缀：/cost-lite 或 网关前缀/cost-lite
 ```
+
+### 11.1 使用宿主 Starter 代理
+
+这是推荐的企业项目接入方式。前端只调用稳定的 `/cost-lite/**` 协议：
+
+```ts
+const costLiteApi = createCostLiteApi(
+  (config) => request(config),
+  { basePath: "/cost-lite", routeMode: "proxy" },
+);
+```
+
+### 11.2 独立 Jar 直连
+
+如果业务系统不引入 Starter，而是通过同源反向代理或网关把独立 Jar 暴露为 `/cost`，只需切换一处配置：
+
+```ts
+const costLiteApi = createCostLiteApi(
+  (config) => request(config),
+  { basePath: "/cost", routeMode: "runtime" },
+);
+```
+
+工作台的场景、费目、要素、规则、版本、试算、日志和结果代码无需修改；适配器会自动把稳定调用转换为 Jar 的 `/cost/scene/**`、`/cost/run/**` 等母体兼容路径。若网关前缀是 `/business/cost`，只改 `basePath`，不逐个修改接口。
 
 ## 12. 首个场景联调顺序
 
@@ -261,7 +284,7 @@ curl -X POST http://127.0.0.1:8080/cost-lite/calculate \
 
 - [ ] `/cost/lite/health` 中服务和数据库均为 `UP`。
 - [ ] 宿主 `/cost-lite/health` 能代理成功。
-- [ ] 前端能加载场景列表。
+- [ ] 前端能加载场景列表（Starter 代理或 Jar 直连均可）。
 - [ ] 能新增场景、费目、要素和规则。
 - [ ] 发布前检查通过，版本可生效。
 - [ ] 正确输入能返回预期金额。
