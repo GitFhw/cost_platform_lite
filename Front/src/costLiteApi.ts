@@ -16,6 +16,13 @@ export interface CostLiteRequest {
 
 export type CostLiteTransport = (request: CostLiteRequest) => Promise<unknown>;
 
+export type CostLiteApiRouteMode = "proxy" | "runtime";
+
+export interface CostLiteApiOptions {
+  basePath?: string;
+  routeMode?: CostLiteApiRouteMode;
+}
+
 export interface CostLiteApi {
   health(): Promise<CostLiteRecord>;
   bootstrap(): Promise<CostLiteRecord>;
@@ -168,9 +175,13 @@ function joinPath(basePath: string, path: string): string {
 
 export function createCostLiteApi(
   transport: CostLiteTransport,
-  options: { basePath?: string } = {},
+  options: CostLiteApiOptions = {},
 ): CostLiteApi {
-  const basePath = options.basePath || "/cost-lite";
+  const routeMode = options.routeMode || "proxy";
+  const basePath = options.basePath || (routeMode === "runtime" ? "/cost" : "/cost-lite");
+
+  const route = (proxyPath: string, runtimePath: string): string =>
+    routeMode === "runtime" ? runtimePath : proxyPath;
 
   const request = (method: CostLiteRequest["method"], path: string, params?: CostLiteRecord, data?: unknown) =>
     transport({ method, url: joinPath(basePath, path), params: cleanParams(params), data });
@@ -182,59 +193,118 @@ export function createCostLiteApi(
     payloadOf(await request(method, path, undefined, data));
 
   return {
-    health: () => getRecord("/health"),
-    bootstrap: () => getRecord("/bootstrap"),
+    health: () => getRecord(route("/health", "/lite/health")),
+    bootstrap: () => getRecord(route("/bootstrap", "/lite/bootstrap")),
 
-    listScenes: (params) => getPage("/scenes", params),
-    getScene: (sceneId) => getRecord(`/scenes/${sceneId}`),
-    createScene: (data) => send("POST", "/scenes", data),
-    updateScene: (data) => send("PUT", "/scenes", data),
-    deleteScenes: (sceneIds) => send("DELETE", `/scenes/${sceneIds.join(",")}`),
+    listScenes: (params) => getPage(route("/scenes", "/scene/list"), params),
+    getScene: (sceneId) => getRecord(route(`/scenes/${sceneId}`, `/scene/${sceneId}`)),
+    createScene: (data) => send("POST", route("/scenes", "/scene"), data),
+    updateScene: (data) => send("PUT", route("/scenes", "/scene"), data),
+    deleteScenes: (sceneIds) => send("DELETE", route(`/scenes/${sceneIds.join(",")}`, `/scene/${sceneIds.join(",")}`)),
 
-    listFees: (sceneId, params) => getPage(`/scenes/${sceneId}/fees`, params),
-    getFee: (feeId) => getRecord(`/fees/${feeId}`),
-    getFeeGovernance: (feeId) => getRecord(`/fees/${feeId}/governance`),
-    createFee: (data) => send("POST", "/fees", data),
-    updateFee: (data) => send("PUT", "/fees", data),
-    deleteFees: (feeIds) => send("DELETE", `/fees/${feeIds.join(",")}`),
+    listFees: (sceneId, params) => getPage(
+      route(`/scenes/${sceneId}/fees`, "/fee/list"),
+      routeMode === "runtime" ? { ...params, sceneId } : params,
+    ),
+    getFee: (feeId) => getRecord(route(`/fees/${feeId}`, `/fee/${feeId}`)),
+    getFeeGovernance: (feeId) => getRecord(route(`/fees/${feeId}/governance`, `/fee/governance/${feeId}`)),
+    createFee: (data) => send("POST", route("/fees", "/fee"), data),
+    updateFee: (data) => send("PUT", route("/fees", "/fee"), data),
+    deleteFees: (feeIds) => send("DELETE", route(`/fees/${feeIds.join(",")}`, `/fee/${feeIds.join(",")}`)),
 
-    listVariables: (sceneId, params) => getPage(`/scenes/${sceneId}/variables`, params),
-    getVariable: (variableId) => getRecord(`/variables/${variableId}`),
-    createVariable: (data) => send("POST", "/variables", data),
-    updateVariable: (data) => send("PUT", "/variables", data),
-    deleteVariables: (variableIds) => send("DELETE", `/variables/${variableIds.join(",")}`),
+    listVariables: (sceneId, params) => getPage(
+      route(`/scenes/${sceneId}/variables`, "/variable/list"),
+      routeMode === "runtime" ? { ...params, sceneId } : params,
+    ),
+    getVariable: (variableId) => getRecord(route(`/variables/${variableId}`, `/variable/${variableId}`)),
+    createVariable: (data) => send("POST", route("/variables", "/variable"), data),
+    updateVariable: (data) => send("PUT", route("/variables", "/variable"), data),
+    deleteVariables: (variableIds) => send("DELETE", route(`/variables/${variableIds.join(",")}`, `/variable/${variableIds.join(",")}`)),
 
-    listVariableGroups: (sceneId) => getArray("/variable-groups", { sceneId }),
-    createVariableGroup: (data) => send("POST", "/variable-groups", data),
-    updateVariableGroup: (data) => send("PUT", "/variable-groups", data),
-    deleteVariableGroups: (groupIds) => send("DELETE", `/variable-groups/${groupIds.join(",")}`),
+    listVariableGroups: (sceneId) => getArray(
+      route("/variable-groups", "/variable/group/list"),
+      { sceneId },
+    ),
+    createVariableGroup: (data) => send("POST", route("/variable-groups", "/variable/group"), data),
+    updateVariableGroup: (data) => send("PUT", route("/variable-groups", "/variable/group"), data),
+    deleteVariableGroups: (groupIds) => send(
+      "DELETE",
+      route(`/variable-groups/${groupIds.join(",")}`, `/variable/group/${groupIds.join(",")}`),
+    ),
 
-    listRules: (sceneId, feeId, params) => getPage("/rules", { ...params, sceneId, feeId }),
-    getRule: (ruleId) => getRecord(`/rules/${ruleId}`),
-    createRule: (data) => send("POST", "/rules", data),
-    updateRule: (data) => send("PUT", "/rules", data),
-    deleteRules: (ruleIds) => send("DELETE", `/rules/${ruleIds.join(",")}`),
-    previewRule: async (data) => recordOf(await request("POST", "/rules/tier-preview", undefined, data)),
-    previewRuleConflict: async (data) => arrayOf(await request("POST", "/rules/conflict-preview", undefined, data)),
+    listRules: (sceneId, feeId, params) => getPage(
+      route("/rules", "/rule/list"),
+      { ...params, sceneId, feeId },
+    ),
+    getRule: (ruleId) => getRecord(route(`/rules/${ruleId}`, `/rule/${ruleId}`)),
+    createRule: (data) => send("POST", route("/rules", "/rule"), data),
+    updateRule: (data) => send("PUT", route("/rules", "/rule"), data),
+    deleteRules: (ruleIds) => send("DELETE", route(`/rules/${ruleIds.join(",")}`, `/rule/${ruleIds.join(",")}`)),
+    previewRule: async (data) => recordOf(await request(
+      "POST",
+      route("/rules/tier-preview", "/rule/tierPreview"),
+      undefined,
+      data,
+    )),
+    previewRuleConflict: async (data) => arrayOf(await request(
+      "POST",
+      route("/rules/conflict-preview", "/rule/conflictPreview"),
+      undefined,
+      data,
+    )),
 
-    listFormulaOptions: (sceneId) => getArray("/formulas/options", { sceneId }),
-    listVersions: (sceneId, params) => getPage("/versions", { ...params, sceneId }),
-    precheckVersion: (sceneId) => getRecord(`/versions/precheck/${sceneId}`),
-    createVersion: async (data) => recordOf(await request("POST", "/versions", undefined, data)),
-    activateVersion: (versionId) => send("PUT", `/versions/${versionId}/activate`),
+    listFormulaOptions: (sceneId) => getArray(
+      route("/formulas/options", "/formula/optionselect"),
+      { sceneId },
+    ),
+    listVersions: (sceneId, params) => getPage(
+      route("/versions", "/publish/list"),
+      { ...params, sceneId },
+    ),
+    precheckVersion: (sceneId) => getRecord(route(`/versions/precheck/${sceneId}`, `/publish/precheck/${sceneId}`)),
+    createVersion: async (data) => recordOf(await request(
+      "POST",
+      route("/versions", "/publish"),
+      undefined,
+      data,
+    )),
+    activateVersion: (versionId) => send("PUT", route(`/versions/${versionId}/activate`, `/publish/activate/${versionId}`)),
 
-    getInputTemplate: (sceneId, feeIds) => getRecord("/input-template", {
-      sceneId,
-      feeIds: feeIds?.join(","),
-    }),
-    calculate: async (data) => recordOf(await request("POST", "/calculate", undefined, data)),
-    executeSimulation: async (data) => recordOf(await request("POST", "/simulations", undefined, data)),
-    submitTask: async (data) => recordOf(await request("POST", "/tasks", undefined, data)),
+    getInputTemplate: (sceneId, feeIds) => getRecord(
+      route(
+        "/input-template",
+        feeIds?.length ? "/run/input-template/fee" : "/run/input-template",
+      ),
+      { sceneId, feeIds: feeIds?.join(",") },
+    ),
+    calculate: async (data) => recordOf(await request(
+      "POST",
+      route("/calculate", "/run/fee/calculate"),
+      undefined,
+      data,
+    )),
+    executeSimulation: async (data) => recordOf(await request(
+      "POST",
+      route("/simulations", "/run/simulation/execute"),
+      undefined,
+      data,
+    )),
+    submitTask: async (data) => recordOf(await request(
+      "POST",
+      route("/tasks", "/run/task/submit"),
+      undefined,
+      data,
+    )),
 
-    listBillingLogs: (params) => getPage("/logs", params),
-    getBillingLog: (simulationId) => getRecord(`/logs/${simulationId}`),
-    listResults: (params) => getPage("/results", params),
-    getResult: (resultId) => getRecord(`/results/${resultId}`),
-    getTrace: (traceId) => getRecord(`/traces/${traceId}`),
+    listBillingLogs: (params) => getPage(
+      route("/logs", "/lite/billing-log/list"),
+      params,
+    ),
+    getBillingLog: (simulationId) => getRecord(
+      route(`/logs/${simulationId}`, `/lite/billing-log/${simulationId}`),
+    ),
+    listResults: (params) => getPage(route("/results", "/run/result/list"), params),
+    getResult: (resultId) => getRecord(route(`/results/${resultId}`, `/run/result/${resultId}`)),
+    getTrace: (traceId) => getRecord(route(`/traces/${traceId}`, `/run/trace/${traceId}`)),
   };
 }

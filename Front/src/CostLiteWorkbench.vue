@@ -775,19 +775,32 @@ async function loadBillingLogs(): Promise<void> {
   }
 }
 
-const resultQuery = reactive({ pageNum: 1, pageSize: 20 });
+const resultQuery = reactive({
+  pageNum: 1,
+  pageSize: 20,
+  billMonth: simulationForm.billMonth,
+});
 const results = ref<CostLiteRecord[]>([]);
 const resultTotal = ref(0);
 
 async function loadResults(): Promise<void> {
   loading.results = true;
   try {
+    const billMonth = resultQuery.billMonth || simulationForm.billMonth;
+    if (!billMonth) {
+      results.value = [];
+      resultTotal.value = 0;
+      return;
+    }
     const page = await api().listResults({
       ...resultQuery,
       sceneId: selectedSceneId.value,
+      billMonth,
     });
     results.value = page.rows;
     resultTotal.value = page.total;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "正式结果加载失败");
   } finally {
     loading.results = false;
   }
@@ -1132,6 +1145,16 @@ onMounted(initialize);
           <template #label><Coin class="tab-icon" />正式结果</template>
           <div class="runtime-table-toolbar">
             <span>正式任务写入结果台账与追溯；同步试算保存在调用日志。</span>
+            <el-date-picker
+              v-model="resultQuery.billMonth"
+              type="month"
+              value-format="YYYY-MM"
+              format="YYYY-MM"
+              :clearable="false"
+              placeholder="账期"
+              style="width: 140px"
+              @change="resultQuery.pageNum = 1; loadResults()"
+            />
             <el-button :icon="Refresh" @click="loadResults">刷新</el-button>
           </div>
           <el-table :data="results" v-loading="loading.results" size="small" border height="300">
