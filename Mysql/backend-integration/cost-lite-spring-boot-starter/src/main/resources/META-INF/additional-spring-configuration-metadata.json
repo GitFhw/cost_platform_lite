@@ -1,0 +1,48 @@
+{
+  "groups": [
+    {
+      "name": "cost.lite.integration",
+      "type": "com.costplatform.lite.spring.CostLiteSpringProperties",
+      "description": "轻量计费平台宿主侧集成配置。"
+    }
+  ],
+  "properties": [
+    {
+      "name": "cost.lite.integration.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": false
+    },
+    {
+      "name": "cost.lite.integration.base-url",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "cost.lite.integration.admin-token",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "cost.lite.integration.open-token",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "cost.lite.integration.web-path",
+      "type": "java.lang.String",
+      "defaultValue": "/cost-lite"
+    },
+    {
+      "name": "cost.lite.integration.proxy-enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true
+    },
+    {
+      "name": "cost.lite.integration.upstream-paths",
+      "type": "java.util.Map",
+      "description": "按路由键覆盖默认母体上游路径；也可以直接提供 CostLiteRouteResolver Bean。"
+    },
+    {
+      "name": "cost.lite.integration.response-mode",
+      "type": "java.lang.String",
+      "defaultValue": "status"
+    }
+  ]
+}
