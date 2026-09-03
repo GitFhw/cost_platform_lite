@@ -56,6 +56,7 @@ public class DefaultCostLiteRouteResolver implements CostLiteRouteResolver {
         LinkedHashMap<String, String> defaults = new LinkedHashMap<>();
         put(defaults, CostLiteRouteKeys.HEALTH, "/cost/lite/health");
         put(defaults, CostLiteRouteKeys.BOOTSTRAP, "/cost/lite/bootstrap");
+        put(defaults, CostLiteRouteKeys.DICTIONARY_OPTIONS, "/cost/dictionary/options");
 
         put(defaults, CostLiteRouteKeys.SCENE_LIST, "/cost/scene/list");
         put(defaults, CostLiteRouteKeys.SCENE_STATS, "/cost/scene/stats");

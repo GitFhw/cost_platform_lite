@@ -4,9 +4,9 @@ spring:
       on-profile: oracle
   datasource:
     driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
-    url: ${COST_LITE_DB_URL:jdbc:oracle:thin:@//127.0.0.1:1521/FREEPDB1}
-    username: ${COST_LITE_DB_USERNAME:cost_lite}
-    password: ${COST_LITE_DB_PASSWORD:}
+    url: ${COST_LITE_DB_URL}
+    username: ${COST_LITE_DB_USERNAME}
+    password: ${COST_LITE_DB_PASSWORD}
     hikari:
       minimum-idle: ${COST_LITE_DB_MIN_IDLE:1}
       maximum-pool-size: ${COST_LITE_DB_MAX_POOL_SIZE:10}

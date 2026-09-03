@@ -48,6 +48,9 @@ $env:COST_LITE_DB_URL = $dbUrl
 
 $java = (Get-Command java -ErrorAction Stop).Source
 $resolvedJar = (Resolve-Path -LiteralPath $JarPath).Path
+if ([string]::IsNullOrWhiteSpace($env:COST_LITE_LOG_PATH)) {
+    $env:COST_LITE_LOG_PATH = Join-Path (Split-Path -Parent $resolvedJar) "logs"
+}
 Write-Output "Starting Cost Lite on port $serverPort with Oracle database URL $dbUrl..."
 & $java -jar $resolvedJar
 exit $LASTEXITCODE

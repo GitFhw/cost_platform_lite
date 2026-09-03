@@ -105,6 +105,7 @@ $env:COST_LITE_DB_SERVICE = "FREEPDB1"
 $env:COST_LITE_DB_USERNAME = "cost_lite"
 $env:COST_LITE_DB_PASSWORD = "请替换为真实密码"
 $env:COST_LITE_SERVER_PORT = "18082"
+$env:COST_LITE_LOG_PATH = "D:\\apps\\cost-lite\\logs"
 
 .\Oracle\bin\start-cost-lite.ps1
 ```
@@ -125,6 +126,7 @@ export COST_LITE_DB_SERVICE=FREEPDB1
 export COST_LITE_DB_USERNAME=cost_lite
 export COST_LITE_DB_PASSWORD='请替换为真实密码'
 export COST_LITE_SERVER_PORT=18082
+export COST_LITE_LOG_PATH=/opt/cost-lite/logs
 
 bash Oracle/bin/start-cost-lite.sh
 ```
