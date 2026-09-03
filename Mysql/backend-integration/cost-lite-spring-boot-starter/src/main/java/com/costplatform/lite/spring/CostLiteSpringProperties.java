@@ -15,7 +15,7 @@ public class CostLiteSpringProperties {
     private String baseUrl;
     private String adminToken;
     private String openToken;
-    private String webPath = "/cost-lite";
+    private String webPath = "/cost";
     private boolean proxyEnabled = true;
     private Map<String, String> upstreamPaths = new LinkedHashMap<>();
     private int connectTimeout = 5000;

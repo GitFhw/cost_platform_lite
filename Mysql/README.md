@@ -13,7 +13,7 @@
 
 ### 1.1 配置归属和组件职责
 
-数据库账号密码不打进 Jar，也不写入 Git。MySQL 运行 Jar 在启动时读取环境变量或 Jar 外部的 `application.yml`；Starter 不读取数据库配置，只负责在业务项目中提供 `/cost-lite/**` 代理 Controller，并把请求转给 MySQL Jar。
+数据库账号密码不打进 Jar，也不写入 Git。MySQL 运行 Jar 在启动时读取环境变量或 Jar 外部的 `application.yml`；Starter 不读取数据库配置，只负责在业务项目中提供 `/cost/**` 代理 Controller，并把请求转给 MySQL Jar。
 
 因此两种部署的配置边界如下：
 
@@ -21,9 +21,9 @@
 | --- | --- | --- |
 | MySQL 运行 Jar | JDBC URL、数据库账号密码、运行端口、管理 Token | 是，连接专用库或业务库 |
 | 业务项目 Starter | MySQL Jar 地址、代理路径、超时、令牌 | 否 |
-| `Front/` 工作台 | `/cost-lite` 或 `/cost` 路由模式 | 否 |
+| `Front/` 工作台 | `/cost` 或 `/cost` 路由模式 | 否 |
 
-当前推荐的正式接入形态是“业务项目前端 + 业务项目 Starter + MySQL 运行 Jar”。运行 Jar 内置轻量 Controller、计费核心和 MySQL 方言适配；Starter 本身不是计费核心，也不把母体 Controller、Service、Mapper 复制进业务项目。
+当前推荐的正式接入形态是“业务项目前端 + 业务项目 Starter + MySQL 运行 Jar”。运行 Jar 内置轻量 Controller、计费核心和 MySQL 方言适配；Starter 本身不是计费核心，也不把母体 Controller、Service、Mapper 复制进业务项目。仓库内的 `source/` 仅供我们维护核心和重新打包，客户迁移不需要复制。
 
 ## 2. 环境要求
 
@@ -136,6 +136,16 @@ java -jar .\Mysql\runtime\cost-lite-server-1.0.0.jar `
 
 这里的“外部配置”是运行 Jar 所在部署单元的配置，不是把数据库账号交给前端。若 Jar 独立部署，它读取 Jar 进程的环境变量或配置文件；业务项目 Starter 只读取自己的 `base-url` 和令牌。
 
+### 4.4 在本仓库重新构建 MySQL Jar
+
+只有修改计费核心、公式引擎或 MySQL 兼容逻辑时才执行本节。客户业务项目不要复制 `Mysql/source/`，仍然直接使用 `Mysql/runtime/` 中的已验证 Jar。
+
+```bash
+mvn -f Mysql/source/pom.xml clean package -DskipTests
+```
+
+完整回归通过后，把 `Mysql/source/target/cost-lite-server.jar` 发布为 `Mysql/runtime/cost-lite-server-1.0.0.jar`，再重新计算 `Mysql/runtime/SHA256SUMS`。`source/target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
+
 ## 5. 验证运行服务
 
 ```bash
@@ -198,7 +208,7 @@ cost:
       base-url: ${COST_LITE_BASE_URL:http://127.0.0.1:18080}
       admin-token: ${COST_LITE_ADMIN_TOKEN:}
       open-token: ${COST_LITE_OPEN_TOKEN:}
-      web-path: /cost-lite
+      web-path: /cost
       proxy-enabled: true
       connect-timeout: 5000
       read-timeout: 30000
@@ -209,18 +219,18 @@ cost:
 启动宿主后验证代理：
 
 ```bash
-curl http://127.0.0.1:8080/cost-lite/health
+curl http://127.0.0.1:8080/cost/health
 ```
 
-如果宿主经过网关统一增加服务前缀，例如 `/business`，浏览器访问路径通常是 `/business/cost-lite/health`，但业务服务内部的 `web-path` 仍保持 `/cost-lite`。
+如果宿主经过网关统一增加服务前缀，例如 `/business`，浏览器访问路径通常是 `/business/cost/health`，但业务服务内部的 `web-path` 仍保持 `/cost`。
 
 ## 9. 权限接入
 
-Starter 只注册代理 Controller，不接管宿主鉴权。应由宿主安全框架保护 `/cost-lite/**`：
+Starter 只注册代理 Controller，不接管宿主鉴权。应由宿主安全框架保护 `/cost/**`：
 
 - 维护类接口只授予计费实施管理员。
 - 试算日志接口可单独授予只读角色；正式任务和正式结果仍由后端内部权限控制。
-- `/cost-lite/health` 可按项目要求放行或限制在内网。
+- `/cost/health` 可按项目要求放行或限制在内网。
 - 生产环境启用运行 Jar 管理 Token，并通过环境变量传给宿主。
 
 ## 10. 字典差异处理
@@ -250,12 +260,12 @@ cost:
 
 ### 11.1 使用宿主 Starter 代理
 
-这是推荐的企业项目接入方式。前端只调用稳定的 `/cost-lite/**` 协议：
+这是推荐的企业项目接入方式。前端只调用稳定的 `/cost/**` 协议：
 
 ```ts
 const costLiteApi = createCostLiteApi(
   (config) => request(config),
-  { basePath: "/cost-lite", routeMode: "proxy" },
+  { basePath: "/cost", routeMode: "proxy" },
 );
 ```
 
@@ -293,7 +303,7 @@ const costLiteApi = createCostLiteApi(
 工作台试算接口：
 
 ```bash
-curl -X POST http://127.0.0.1:8080/cost-lite/simulations \
+curl -X POST http://127.0.0.1:8080/cost/simulations \
   -H "Content-Type: application/json" \
   -d '{
     "sceneId": 4,
@@ -313,7 +323,7 @@ curl -X POST http://127.0.0.1:8080/cost-lite/simulations \
 
 | 调用方式 | 路径 |
 | --- | --- |
-| Starter 代理 | `POST /cost-lite/simulations/batch` |
+| Starter 代理 | `POST /cost/simulations/batch` |
 | 独立 Jar | `POST /cost/run/simulation/batch-execute` |
 
 `inputJson` 传对象数组字符串，每个对象建议带唯一 `bizNo`。服务端逐条执行，成功和失败都写入 `cost_simulation_record`，返回批次统计和每条记录的单条详情节点；金额读取 `records[*].result.amountTotal`，费目明细读取 `records[*].result.feeResults`。不会创建正式任务、正式结果台账或结果追溯。
@@ -334,7 +344,7 @@ curl -X POST http://127.0.0.1:8080/cost-lite/simulations \
 先通过工作台或接口取得真实 `sceneId`、`versionId` 和 `feeId`：
 
 ```bash
-curl -X POST http://127.0.0.1:8080/cost-lite/calculate \
+curl -X POST http://127.0.0.1:8080/cost/calculate \
   -H "Content-Type: application/json" \
   -d '{
     "sceneId": 4,
@@ -346,20 +356,20 @@ curl -X POST http://127.0.0.1:8080/cost-lite/calculate \
 }'
 ```
 
-Starter 通过宿主权限保护 `/cost-lite/calculate`，上游管理令牌由 Starter 的 `admin-token` 配置注入；独立 Jar 对应路径是 `POST /cost/run/fee/calculate`，直接使用 `X-Cost-Lite-Token`。成功返回中包含费用金额和 `billingLogId`。格式错误等失败请求也会返回 `billingLogId`，用于查询失败日志。
+Starter 通过宿主权限保护 `/cost/calculate`，上游管理令牌由 Starter 的 `admin-token` 配置注入；独立 Jar 对应路径是 `POST /cost/run/fee/calculate`，直接使用 `X-Cost-Lite-Token`。成功返回中包含费用金额和 `billingLogId`。格式错误等失败请求也会返回 `billingLogId`，用于查询失败日志。
 
 ## 15. 场景级业务系统调用方案
 
-业务项目内嵌集成时，业务后端引入 Starter 并调用稳定的 `/cost-lite/**` 路径；Starter 连接独立 Jar 时使用配置中的 `base-url` 和 `admin-token`，业务代码不接触数据库账号，也不需要创建 `openApp`。独立 Jar 部署则直接调用 `/cost/**` 管理路径：
+业务项目内嵌集成时，业务后端引入 Starter 并调用稳定的 `/cost/**` 路径；Starter 连接独立 Jar 时使用配置中的 `base-url` 和 `admin-token`，业务代码不接触数据库账号，也不需要创建 `openApp`。独立 Jar 部署则直接调用 `/cost/**` 管理路径：
 
 | 能力 | Starter 代理 | 独立 Jar |
 | --- | --- | --- |
-| 查询场景 | `GET /cost-lite/scenes` | `GET /cost/scene/list` |
-| 查询场景版本 | `GET /cost-lite/scenes/{sceneId}/versions` | `GET /cost/run/version-options/{sceneId}` |
-| 查询场景费目 | `GET /cost-lite/fees?sceneId={sceneId}` | `GET /cost/fee/list?sceneId={sceneId}` |
-| 场景级同步计费 | `POST /cost-lite/calculate` | `POST /cost/run/fee/calculate` |
+| 查询场景 | `GET /cost/scenes` | `GET /cost/scene/list` |
+| 查询场景版本 | `GET /cost/scenes/{sceneId}/versions` | `GET /cost/run/version-options/{sceneId}` |
+| 查询场景费目 | `GET /cost/fees?sceneId={sceneId}` | `GET /cost/fee/list?sceneId={sceneId}` |
+| 场景级同步计费 | `POST /cost/calculate` | `POST /cost/run/fee/calculate` |
 | 指定费目同步计费 | 同上，请求体传 `feeId` | 同上，请求体传 `feeId` |
-| 批量试算 | `POST /cost-lite/simulations/batch` | `POST /cost/run/simulation/batch-execute` |
+| 批量试算 | `POST /cost/simulations/batch` | `POST /cost/run/simulation/batch-execute` |
 
 业务系统启动或缓存刷新时解析一次“场景 -> 生效版本 -> 费目”，交易请求只传稳定的 `sceneId`、`versionId`、`feeId` 和输入数据；不要在每笔交易中读取 `cost_*` 配置表。生产同步计费固定使用生效版本，配置变更由发布流程控制。
 
@@ -371,14 +381,14 @@ Starter 通过宿主权限保护 `/cost-lite/calculate`，上游管理令牌由 
 
 ```bash
 # 1. 查询场景当前可用版本和费目
-curl "http://127.0.0.1:8080/cost-lite/scenes/4/versions"
-curl "http://127.0.0.1:8080/cost-lite/fees?sceneId=4&pageNum=1&pageSize=200"
+curl "http://127.0.0.1:8080/cost/scenes/4/versions"
+curl "http://127.0.0.1:8080/cost/fees?sceneId=4&pageNum=1&pageSize=200"
 
 # 2. 按指定费目取得输入模板
-curl "http://127.0.0.1:8080/cost-lite/template?sceneId=4&versionId=1&feeId=1"
+curl "http://127.0.0.1:8080/cost/template?sceneId=4&versionId=1&feeId=1"
 
 # 3. 只计算一个费目
-curl -X POST http://127.0.0.1:8080/cost-lite/calculate \
+curl -X POST http://127.0.0.1:8080/cost/calculate \
   -H "Content-Type: application/json" \
   -d '{
     "sceneId": 4,
@@ -398,16 +408,16 @@ curl -X POST http://127.0.0.1:8080/cost-lite/calculate \
 
 | 查询内容 | Starter 代理 | 独立 Jar |
 | --- | --- | --- |
-| 试算日志分页 | `GET /cost-lite/logs` | `GET /cost/lite/billing-log/list` |
-| 试算日志详情（含结果） | `GET /cost-lite/logs/{simulationId}` | `GET /cost/lite/billing-log/{simulationId}` |
+| 试算日志分页 | `GET /cost/logs` | `GET /cost/lite/billing-log/list` |
+| 试算日志详情（含结果） | `GET /cost/logs/{simulationId}` | `GET /cost/lite/billing-log/{simulationId}` |
 
 示例：
 
 ```bash
 curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
-  "http://127.0.0.1:8080/cost-lite/logs?sceneId=4&pageNum=1&pageSize=20"
+  "http://127.0.0.1:8080/cost/logs?sceneId=4&pageNum=1&pageSize=20"
 curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
-  "http://127.0.0.1:8080/cost-lite/logs/10001"
+  "http://127.0.0.1:8080/cost/logs/10001"
 ```
 
 内嵌 Starter 集成时，试算日志和配置管理通过宿主权限保护；独立 Jar 管理接口使用 `X-Cost-Lite-Token`。OpenApp 令牌模式不开放试算日志、正式任务或正式结果管理查询；不要把管理 Token 下发给浏览器。第三方报表如启用正式核算，应由业务系统后端或只读投影服务查询，不修改计费核心表。
@@ -442,7 +452,7 @@ curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
 ## 21. 验收清单
 
 - [ ] `/cost/lite/health` 中服务和数据库均为 `UP`。
-- [ ] 宿主 `/cost-lite/health` 能代理成功。
+- [ ] 宿主 `/cost/health` 能代理成功。
 - [ ] 前端能加载场景列表（Starter 代理或 Jar 直连均可）。
 - [ ] 能新增场景、费目、要素、条件组、规则和公式。
 - [ ] 公式试算返回预期结果，公式版本可以查看和回退。
@@ -455,7 +465,7 @@ curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
 
 ## 22. 常见问题
 
-### 宿主启动后没有 `/cost-lite/health`
+### 宿主启动后没有 `/cost/health`
 
 检查 `cost.lite.integration.enabled=true`、Starter 是否进入运行时依赖，以及宿主组件扫描是否包含自动配置。
 

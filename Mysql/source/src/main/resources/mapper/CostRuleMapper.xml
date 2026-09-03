@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostRuleMapper">
+
+    <resultMap id="CostRuleResult" type="com.ruoyi.system.domain.cost.CostRule">
+        <id property="ruleId" column="rule_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="feeId" column="fee_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="feeCode" column="fee_code" />
+        <result property="feeName" column="fee_name" />
+        <result property="quantityVariableName" column="quantity_variable_name" />
+        <result property="ruleCode" column="rule_code" />
+        <result property="ruleName" column="rule_name" />
+        <result property="ruleType" column="rule_type" />
+        <result property="conditionLogic" column="condition_logic" />
+        <result property="priority" column="priority" />
+        <result property="quantityVariableCode" column="quantity_variable_code" />
+        <result property="pricingMode" column="pricing_mode" />
+        <result property="pricingJson" column="pricing_json" />
+        <result property="amountFormula" column="amount_formula" />
+        <result property="amountFormulaCode" column="amount_formula_code" />
+        <result property="amountFormulaName" column="amount_formula_name" />
+        <result property="amountBusinessFormula" column="amount_business_formula" />
+        <result property="noteTemplate" column="note_template" />
+        <result property="status" column="status" />
+        <result property="sortNo" column="sort_no" />
+        <result property="conditionSummary" column="condition_summary" />
+        <result property="conditionCount" column="condition_count" />
+        <result property="tierCount" column="tier_count" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <resultMap id="CostRuleConditionResult" type="com.ruoyi.system.domain.cost.CostRuleCondition">
+        <id property="conditionId" column="condition_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="ruleId" column="rule_id" />
+        <result property="groupNo" column="group_no" />
+        <result property="sortNo" column="sort_no" />
+        <result property="variableCode" column="variable_code" />
+        <result property="displayName" column="display_name" />
+        <result property="operatorCode" column="operator_code" />
+        <result property="compareValue" column="compare_value" />
+        <result property="status" column="status" />
+        <result property="variableName" column="variable_name" />
+        <result property="variableType" column="variable_type" />
+        <result property="dataType" column="data_type" />
+        <result property="dictType" column="dict_type" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <resultMap id="CostRuleTierResult" type="com.ruoyi.system.domain.cost.CostRuleTier">
+        <id property="tierId" column="tier_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="ruleId" column="rule_id" />
+        <result property="startValue" column="start_value" />
+        <result property="endValue" column="end_value" />
+        <result property="rateValue" column="rate_value" />
+        <result property="intervalMode" column="interval_mode" />
+        <result property="tierNo" column="tier_no" />
+        <result property="status" column="status" />
+        <result property="rangeSummary" column="range_summary" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <resultMap id="CostRuleStatsResult" type="java.util.LinkedHashMap">
+        <result property="ruleCount" column="ruleCount" />
+        <result property="enabledRuleCount" column="enabledRuleCount" />
+        <result property="tierRuleCount" column="tierRuleCount" />
+        <result property="formulaRuleCount" column="formulaRuleCount" />
+    </resultMap>
+
+    <sql id="selectRuleVo">
+        select r.rule_id,
+               r.scene_id,
+               r.fee_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               f.fee_code,
+               f.fee_name,
+               r.rule_code,
+               r.rule_name,
+               r.rule_type,
+               r.condition_logic,
+               r.priority,
+               r.quantity_variable_code,
+               qv.variable_name as quantity_variable_name,
+               r.pricing_mode,
+               r.pricing_json,
+               r.amount_formula,
+               r.amount_formula_code,
+               af.formula_name as amount_formula_name,
+               af.business_formula as amount_business_formula,
+               r.note_template,
+               r.status,
+               r.sort_no,
+               r.remark,
+               r.create_by,
+               r.create_time,
+               r.update_by,
+               r.update_time,
+               (select count(1) from cost_rule_condition c where c.rule_id = r.rule_id) as condition_count,
+               (select count(1) from cost_rule_tier t where t.rule_id = r.rule_id) as tier_count,
+               (select group_concat(concat(c.display_name, ' ', c.operator_code, ' ', ifnull(c.compare_value, '')) order by c.group_no asc, c.sort_no asc separator '; ')
+                from cost_rule_condition c
+                where c.rule_id = r.rule_id and c.status = '0') as condition_summary
+        from cost_rule r
+        left join cost_scene s on s.scene_id = r.scene_id
+        left join cost_fee_item f on f.fee_id = r.fee_id
+        left join cost_variable qv on qv.scene_id = r.scene_id and qv.variable_code = r.quantity_variable_code
+        left join cost_formula af on af.scene_id = r.scene_id and af.formula_code = r.amount_formula_code
+    </sql>
+
+    <sql id="ruleWhere">
+        <where>
+            <if test="sceneId != null">
+                and r.scene_id = #{sceneId}
+            </if>
+            <if test="feeId != null">
+                and r.fee_id = #{feeId}
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and s.business_domain = #{businessDomain}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    r.rule_code like concat('%', #{keyword}, '%')
+                    or r.rule_name like concat('%', #{keyword}, '%')
+                    or f.fee_code like concat('%', #{keyword}, '%')
+                    or f.fee_name like concat('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="ruleCode != null and ruleCode != ''">
+                and r.rule_code like concat('%', #{ruleCode}, '%')
+            </if>
+            <if test="ruleName != null and ruleName != ''">
+                and r.rule_name like concat('%', #{ruleName}, '%')
+            </if>
+            <if test="ruleType != null and ruleType != ''">
+                and r.rule_type = #{ruleType}
+            </if>
+            <if test="status != null and status != ''">
+                and r.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectRuleList" parameterType="com.ruoyi.system.domain.cost.CostRule" resultMap="CostRuleResult">
+        <include refid="selectRuleVo" />
+        <include refid="ruleWhere" />
+        order by r.priority desc, r.sort_no asc, r.rule_id desc
+    </select>
+
+    <select id="selectRuleStats" parameterType="com.ruoyi.system.domain.cost.CostRule" resultMap="CostRuleStatsResult">
+        select count(1) as ruleCount,
+               coalesce(sum(case when r.status = '0' then 1 else 0 end), 0) as enabledRuleCount,
+               coalesce(sum(case when r.rule_type = 'TIER_RATE' then 1 else 0 end), 0) as tierRuleCount,
+               coalesce(sum(case when r.rule_type = 'FORMULA' then 1 else 0 end), 0) as formulaRuleCount
+        from cost_rule r
+        left join cost_scene s on s.scene_id = r.scene_id
+        left join cost_fee_item f on f.fee_id = r.fee_id
+        <include refid="ruleWhere" />
+    </select>
+
+    <select id="selectRuleGovernanceCheck" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostRuleGovernanceCheckVo">
+        select r.rule_id as ruleId,
+               r.scene_id as sceneId,
+               r.fee_id as feeId,
+               s.scene_code as sceneCode,
+               s.scene_name as sceneName,
+               f.fee_code as feeCode,
+               f.fee_name as feeName,
+               r.rule_code as ruleCode,
+               r.rule_name as ruleName,
+               r.status as status,
+               (select count(1) from cost_rule_condition c where c.rule_id = r.rule_id) as conditionCount,
+               (select count(1) from cost_rule_tier t where t.rule_id = r.rule_id) as tierCount,
+               (select count(1)
+                from cost_publish_snapshot snap
+                join cost_publish_version ver on ver.version_id = snap.version_id
+                where ver.scene_id = r.scene_id
+                  and snap.snapshot_type = 'RULE'
+                  and snap.object_code = r.rule_code) as publishedVersionCount,
+               (select count(1) from cost_result_trace td where td.rule_id = r.rule_id) as traceCount
+        from cost_rule r
+        left join cost_scene s on s.scene_id = r.scene_id
+        left join cost_fee_item f on f.fee_id = r.fee_id
+        where r.rule_id = #{ruleId}
+    </select>
+
+    <select id="selectConditionsByRuleId" parameterType="Long" resultMap="CostRuleConditionResult">
+        select c.condition_id,
+               c.scene_id,
+               c.rule_id,
+               c.group_no,
+               c.sort_no,
+               c.variable_code,
+               c.display_name,
+               c.operator_code,
+               c.compare_value,
+               c.status,
+               c.remark,
+               v.variable_name,
+               v.variable_type,
+               v.data_type,
+               v.dict_type
+        from cost_rule_condition c
+        left join cost_variable v on v.scene_id = c.scene_id and v.variable_code = c.variable_code
+        where c.rule_id = #{ruleId}
+        order by c.group_no asc, c.sort_no asc, c.condition_id asc
+    </select>
+
+    <select id="selectTiersByRuleId" parameterType="Long" resultMap="CostRuleTierResult">
+        select t.tier_id,
+               t.scene_id,
+               t.rule_id,
+               t.start_value,
+               t.end_value,
+               t.rate_value,
+               t.interval_mode,
+               t.tier_no,
+               t.status,
+               t.remark,
+               concat(
+                   ifnull(cast(t.start_value as char), '-INF'),
+                   case when t.interval_mode = 'LEFT_OPEN_RIGHT_CLOSED' then ' &lt; x &lt;= ' else ' &lt;= x &lt; ' end,
+                   ifnull(cast(t.end_value as char), '+INF')
+               ) as range_summary
+        from cost_rule_tier t
+        where t.rule_id = #{ruleId}
+        order by t.tier_no asc, t.tier_id asc
+    </select>
+
+    <delete id="deleteConditionsByRuleIds">
+        delete from cost_rule_condition
+        where rule_id in
+        <foreach collection="array" item="ruleId" open="(" separator="," close=")">
+            #{ruleId}
+        </foreach>
+    </delete>
+
+    <delete id="deleteTiersByRuleIds">
+        delete from cost_rule_tier
+        where rule_id in
+        <foreach collection="array" item="ruleId" open="(" separator="," close=")">
+            #{ruleId}
+        </foreach>
+    </delete>
+
+</mapper>
