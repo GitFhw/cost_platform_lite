@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostFormulaVersionMapper">
+
+    <resultMap id="CostFormulaVersionResult" type="com.ruoyi.system.domain.cost.CostFormulaVersion">
+        <id property="versionId" column="version_id" />
+        <result property="formulaId" column="formula_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="formulaCode" column="formula_code" />
+        <result property="formulaName" column="formula_name" />
+        <result property="assetType" column="asset_type" />
+        <result property="versionNo" column="version_no" />
+        <result property="changeType" column="change_type" />
+        <result property="businessFormula" column="business_formula" />
+        <result property="formulaExpr" column="formula_expr" />
+        <result property="workbenchMode" column="workbench_mode" />
+        <result property="workbenchPattern" column="workbench_pattern" />
+        <result property="templateCode" column="template_code" />
+        <result property="workbenchConfigJson" column="workbench_config_json" />
+        <result property="snapshotJson" column="snapshot_json" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <select id="selectFormulaVersionList" parameterType="Long" resultMap="CostFormulaVersionResult">
+        select version_id,
+               formula_id,
+               scene_id,
+               formula_code,
+               formula_name,
+               asset_type,
+               version_no,
+               change_type,
+               business_formula,
+               formula_expr,
+               workbench_mode,
+               workbench_pattern,
+               template_code,
+               workbench_config_json,
+               snapshot_json,
+               create_by,
+               create_time
+        from cost_formula_version
+        where formula_id = #{formulaId}
+        order by version_no desc, version_id desc
+    </select>
+
+</mapper>

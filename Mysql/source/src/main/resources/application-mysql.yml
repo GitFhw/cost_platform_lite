@@ -1,0 +1,20 @@
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    driver-class-name: ${COST_LITE_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+    url: ${COST_LITE_DB_URL}
+    username: ${COST_LITE_DB_USERNAME}
+    password: ${COST_LITE_DB_PASSWORD}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+cost:
+  lite:
+    dictionary:
+      provider: ${COST_LITE_DICTIONARY_PROVIDER:SYSTEM}
+      validation-enabled: ${COST_LITE_DICTIONARY_VALIDATION_ENABLED:true}
+      allow-unconfigured-types: ${COST_LITE_DICTIONARY_ALLOW_UNCONFIGURED_TYPES:true}

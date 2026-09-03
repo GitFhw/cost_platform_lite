@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostCalcInputBatchItemMapper">
+
+    <insert id="insertBatch">
+        insert into cost_calc_input_batch_item (
+            batch_id,
+            batch_no,
+            item_no,
+            biz_no,
+            item_status,
+            input_json,
+            error_message
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.batchId},
+                #{item.batchNo},
+                #{item.itemNo},
+                #{item.bizNo},
+                #{item.itemStatus},
+                #{item.inputJson},
+                #{item.errorMessage}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

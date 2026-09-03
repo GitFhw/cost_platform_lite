@@ -1,0 +1,345 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostFeeMapper">
+
+    <resultMap id="CostFeeResult" type="com.ruoyi.system.domain.cost.CostFeeItem">
+        <id property="feeId" column="fee_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="sceneDefaultObjectDimension" column="scene_default_object_dimension" />
+        <result property="feeCode" column="fee_code" />
+        <result property="feeName" column="fee_name" />
+        <result property="feeCategory" column="fee_category" />
+        <result property="unitCode" column="unit_code" />
+        <result property="factorSummary" column="factor_summary" />
+        <result property="scopeDescription" column="scope_description" />
+        <result property="objectDimension" column="object_dimension" />
+        <result property="sortNo" column="sort_no" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <resultMap id="CostFeeStatsResult" type="java.util.LinkedHashMap">
+        <result property="feeCount" column="feeCount" />
+        <result property="enabledFeeCount" column="enabledFeeCount" />
+        <result property="sceneCoverageCount" column="sceneCoverageCount" />
+    </resultMap>
+
+    <sql id="selectFeeVo">
+        select f.fee_id,
+               f.scene_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               s.default_object_dimension as scene_default_object_dimension,
+               f.fee_code,
+               f.fee_name,
+               f.fee_category,
+               f.unit_code,
+               f.factor_summary,
+               f.scope_description,
+               f.object_dimension,
+               f.sort_no,
+               f.status,
+               f.remark,
+               f.create_by,
+               f.create_time,
+               f.update_by,
+               f.update_time
+        from cost_fee_item f
+        left join cost_scene s on s.scene_id = f.scene_id
+    </sql>
+
+    <sql id="feeWhere">
+        <where>
+            <if test="sceneId != null">
+                and f.scene_id = #{sceneId}
+            </if>
+            <if test="feeIds != null and feeIds.length > 0">
+                and f.fee_id in
+                <foreach collection="feeIds" item="feeId" open="(" separator="," close=")">
+                    #{feeId}
+                </foreach>
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and s.business_domain = #{businessDomain}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    f.fee_code like concat('%', #{keyword}, '%')
+                    or f.fee_name like concat('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="feeCode != null and feeCode != ''">
+                and f.fee_code like concat('%', #{feeCode}, '%')
+            </if>
+            <if test="feeName != null and feeName != ''">
+                and f.fee_name like concat('%', #{feeName}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                and f.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectFeeList" parameterType="com.ruoyi.system.domain.cost.CostFeeItem" resultMap="CostFeeResult">
+        <include refid="selectFeeVo"/>
+        <include refid="feeWhere"/>
+        order by f.update_time desc, f.fee_id desc
+    </select>
+
+    <select id="selectFeeOptions" parameterType="com.ruoyi.system.domain.cost.CostFeeItem" resultMap="CostFeeResult">
+        <include refid="selectFeeVo"/>
+        <include refid="feeWhere"/>
+        order by s.scene_name asc, f.sort_no asc, f.fee_id asc
+    </select>
+
+    <select id="selectFeeStats" parameterType="com.ruoyi.system.domain.cost.CostFeeItem" resultMap="CostFeeStatsResult">
+        select count(1) as feeCount,
+               coalesce(sum(case when f.status = '0' then 1 else 0 end), 0) as enabledFeeCount,
+               count(distinct f.scene_id) as sceneCoverageCount
+        from cost_fee_item f
+        left join cost_scene s on s.scene_id = f.scene_id
+        <include refid="feeWhere"/>
+    </select>
+
+    <select id="selectFeeGovernanceCheck" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo">
+        select f.fee_id as feeId,
+               f.scene_id as sceneId,
+               s.scene_code as sceneCode,
+               s.scene_name as sceneName,
+               s.business_domain as businessDomain,
+               s.default_object_dimension as sceneDefaultObjectDimension,
+               f.fee_code as feeCode,
+               f.fee_name as feeName,
+               f.fee_category as feeCategory,
+               f.unit_code as unitCode,
+               f.factor_summary as factorSummary,
+               f.scope_description as scopeDescription,
+               f.object_dimension as objectDimension,
+               f.sort_no as sortNo,
+               f.status as status,
+               f.remark as remark,
+               (select count(1) from cost_rule r where r.fee_id = f.fee_id) as ruleCount,
+               (select count(1) from cost_fee_variable_rel rel where rel.fee_id = f.fee_id) as variableRelCount,
+               (select count(1)
+                from cost_publish_snapshot snap
+                join cost_publish_version ver on ver.version_id = snap.version_id
+                where ver.scene_id = f.scene_id
+                  and snap.snapshot_type = 'FEE'
+                  and snap.object_code = f.fee_code) as publishedVersionCount,
+               (select count(1) from cost_result_ledger l where l.fee_id = f.fee_id) as resultLedgerCount,
+               (select count(1) from cost_rule r where r.fee_id = f.fee_id and r.status = '0') as enabledRuleCount,
+               (select count(1) from cost_rule r where r.fee_id = f.fee_id and r.status != '0') as disabledRuleCount,
+               (select count(1)
+                from cost_fee_variable_rel rel
+                join cost_variable v on v.variable_id = rel.variable_id
+                where rel.fee_id = f.fee_id
+                  and v.status = '0') as enabledVariableRelCount,
+               (select count(1)
+                from cost_fee_variable_rel rel
+                left join cost_variable v on v.variable_id = rel.variable_id
+                where rel.fee_id = f.fee_id
+                  and (v.variable_id is null or v.status != '0')) as invalidVariableRelCount,
+               (select count(1)
+                from cost_rule r
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and r.rule_type = 'TIER_RATE'
+                  and not exists (
+                      select 1
+                      from cost_rule_tier t
+                      where t.rule_id = r.rule_id
+                        and t.status = '0'
+                  )) as tierRuleMissingTierCount,
+               (select count(1)
+                from cost_rule r
+                left join cost_variable v on v.scene_id = r.scene_id
+                     and v.variable_code = r.quantity_variable_code
+                     and v.status = '0'
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and length(trim(r.quantity_variable_code)) > 0
+                  and v.variable_id is null) as missingQuantityVariableCount,
+               (select count(1)
+                from cost_rule r
+                join cost_rule_condition c on c.rule_id = r.rule_id
+                left join cost_variable v on v.scene_id = r.scene_id
+                     and v.variable_code = c.variable_code
+                     and v.status = '0'
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and length(trim(c.variable_code)) > 0
+                  and v.variable_id is null) as missingConditionVariableCount,
+               (select count(1)
+                from cost_rule r
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and r.rule_type = 'FORMULA'
+                  and length(trim(r.amount_formula_code)) = 0) as missingFormulaCodeCount,
+               (select count(1)
+                from cost_rule r
+                left join cost_formula fo on fo.scene_id = r.scene_id
+                     and fo.formula_code = r.amount_formula_code
+                     and fo.status = '0'
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and r.rule_type = 'FORMULA'
+                  and length(trim(r.amount_formula_code)) > 0
+                  and fo.formula_id is null) as missingFormulaAssetCount
+        from cost_fee_item f
+        left join cost_scene s on s.scene_id = f.scene_id
+        where f.fee_id = #{feeId}
+    </select>
+
+    <select id="selectFeeVariableContracts" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeVariableContractVo">
+        select rel.rel_id as relId,
+               rel.scene_id as sceneId,
+               rel.fee_id as feeId,
+               rel.variable_id as variableId,
+               v.variable_code as variableCode,
+               v.variable_name as variableName,
+               v.variable_type as variableType,
+               v.source_type as variableSourceType,
+               v.data_type as dataType,
+               v.data_path as dataPath,
+               v.status as variableStatus,
+               rel.relation_type as relationType,
+               rel.source_type as sourceType,
+               rel.source_rule_id as sourceRuleId,
+               rel.source_code as sourceCode,
+               r.rule_code as sourceRuleCode,
+               r.rule_name as sourceRuleName,
+               rel.sort_no as sortNo,
+               rel.remark as remark
+        from cost_fee_variable_rel rel
+        left join cost_variable v on v.variable_id = rel.variable_id
+        left join cost_rule r on r.rule_id = rel.source_rule_id
+        where rel.fee_id = #{feeId}
+        order by rel.sort_no asc, rel.rel_id asc
+    </select>
+
+    <select id="selectFeeRuleSummaries" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeRuleSummaryVo">
+        select r.rule_id as ruleId,
+               r.scene_id as sceneId,
+               r.fee_id as feeId,
+               r.rule_code as ruleCode,
+               r.rule_name as ruleName,
+               r.rule_type as ruleType,
+               r.pricing_mode as pricingMode,
+               r.priority as priority,
+               r.quantity_variable_code as quantityVariableCode,
+               r.amount_formula_code as amountFormulaCode,
+               r.status as status,
+               (select count(1) from cost_rule_condition c where c.rule_id = r.rule_id) as conditionCount,
+               (select count(1) from cost_rule_tier t where t.rule_id = r.rule_id) as tierCount
+        from cost_rule r
+        where r.fee_id = #{feeId}
+        order by r.priority asc, r.sort_no asc, r.rule_id asc
+        limit 20
+    </select>
+
+    <select id="selectFeePublishRefs" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeePublishRefVo">
+        select ver.version_id as versionId,
+               ver.scene_id as sceneId,
+               ver.version_no as versionNo,
+               ver.version_status as versionStatus,
+               ver.publish_desc as publishDesc,
+               ver.published_by as publishedBy,
+               ver.published_time as publishedTime
+        from cost_fee_item f
+        join cost_publish_version ver on ver.scene_id = f.scene_id
+        join cost_publish_snapshot snap on snap.version_id = ver.version_id
+             and snap.snapshot_type = 'FEE'
+             and snap.object_code = f.fee_code
+        where f.fee_id = #{feeId}
+        order by ver.published_time desc, ver.version_id desc
+        limit 20
+    </select>
+
+    <select id="selectFeeResultRefs" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeResultRefVo">
+        select l.result_id as resultId,
+               l.task_id as taskId,
+               l.version_id as versionId,
+               ver.version_no as versionNo,
+               l.task_no as taskNo,
+               l.biz_no as bizNo,
+               l.bill_month as billMonth,
+               l.object_dimension as objectDimension,
+               l.object_code as objectCode,
+               l.object_name as objectName,
+               l.quantity_value as quantityValue,
+               l.unit_price as unitPrice,
+               l.amount_value as amountValue,
+               l.currency_code as currencyCode,
+               l.result_status as resultStatus,
+               l.create_time as createTime
+        from cost_result_ledger l
+        left join cost_publish_version ver on ver.version_id = l.version_id
+        where l.fee_id = #{feeId}
+        order by l.create_time desc, l.result_id desc
+        limit 20
+    </select>
+
+    <insert id="insertFeeVariableRels">
+        insert into cost_fee_variable_rel (
+            scene_id,
+            fee_id,
+            variable_id,
+            relation_type,
+            source_type,
+            source_rule_id,
+            source_code,
+            sort_no,
+            remark,
+            create_by,
+            create_time,
+            update_by,
+            update_time
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.sceneId},
+                #{item.feeId},
+                #{item.variableId},
+                #{item.relationType},
+                #{item.sourceType},
+                #{item.sourceRuleId},
+                #{item.sourceCode},
+                #{item.sortNo},
+                #{item.remark},
+                'system',
+                sysdate(),
+                'system',
+                sysdate()
+            )
+        </foreach>
+    </insert>
+
+    <delete id="deleteRuleDerivedFeeVariableRelByFeeIds">
+        delete from cost_fee_variable_rel
+        where source_type = 'RULE_DERIVED'
+          and fee_id in
+        <foreach collection="array" item="feeId" open="(" separator="," close=")">
+            #{feeId}
+        </foreach>
+    </delete>
+
+    <delete id="deleteFeeVariableRelByFeeIds">
+        delete from cost_fee_variable_rel
+        where fee_id in
+        <foreach collection="array" item="feeId" open="(" separator="," close=")">
+            #{feeId}
+        </foreach>
+    </delete>
+
+</mapper>

@@ -42,6 +42,16 @@ class CostLiteSpringBootAutoConfigurationTest {
     }
 
     @Test
+    void usesCostAsTheDefaultHostPath() {
+        contextRunner
+                .withPropertyValues(
+                        "cost.lite.integration.enabled=true",
+                        "cost.lite.integration.base-url=http://127.0.0.1:18080")
+                .run(context -> assertThat(context.getBean(CostLiteSpringProperties.class).getWebPath())
+                        .isEqualTo("/cost"));
+    }
+
+    @Test
     void allowsHostToDisableOnlyTheProxyController() {
         contextRunner
                 .withPropertyValues(

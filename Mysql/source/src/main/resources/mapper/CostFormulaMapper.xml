@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostFormulaMapper">
+
+    <resultMap id="CostFormulaResult" type="com.ruoyi.system.domain.cost.CostFormula">
+        <id property="formulaId" column="formula_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="formulaCode" column="formula_code" />
+        <result property="formulaName" column="formula_name" />
+        <result property="formulaDesc" column="formula_desc" />
+        <result property="businessFormula" column="business_formula" />
+        <result property="formulaExpr" column="formula_expr" />
+        <result property="assetType" column="asset_type" />
+        <result property="workbenchMode" column="workbench_mode" />
+        <result property="workbenchPattern" column="workbench_pattern" />
+        <result property="templateCode" column="template_code" />
+        <result property="workbenchConfigJson" column="workbench_config_json" />
+        <result property="namespaceScope" column="namespace_scope" />
+        <result property="returnType" column="return_type" />
+        <result property="testCaseJson" column="test_case_json" />
+        <result property="sampleResultJson" column="sample_result_json" />
+        <result property="lastTestTime" column="last_test_time" />
+        <result property="status" column="status" />
+        <result property="sortNo" column="sort_no" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="variableRefCount" column="variable_ref_count" />
+        <result property="ruleRefCount" column="rule_ref_count" />
+        <result property="publishedVersionCount" column="published_version_count" />
+        <result property="currentVersionNo" column="current_version_no" />
+    </resultMap>
+
+    <resultMap id="CostFormulaStatsResult" type="java.util.LinkedHashMap">
+        <result property="formulaCount" column="formulaCount" />
+        <result property="enabledFormulaCount" column="enabledFormulaCount" />
+        <result property="variableRefCount" column="variableRefCount" />
+        <result property="ruleRefCount" column="ruleRefCount" />
+    </resultMap>
+
+    <sql id="selectFormulaVo">
+        select f.formula_id,
+               f.scene_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               f.formula_code,
+               f.formula_name,
+               f.formula_desc,
+               f.business_formula,
+               f.formula_expr,
+               f.asset_type,
+               f.workbench_mode,
+               f.workbench_pattern,
+               f.template_code,
+               f.workbench_config_json,
+               f.namespace_scope,
+               f.return_type,
+               f.test_case_json,
+               f.sample_result_json,
+               f.last_test_time,
+               f.status,
+               f.sort_no,
+               f.remark,
+               f.create_by,
+               f.create_time,
+               f.update_by,
+               f.update_time,
+               (select count(1) from cost_variable v where v.scene_id = f.scene_id and v.formula_code = f.formula_code) as variable_ref_count,
+               (select count(1) from cost_rule r where r.scene_id = f.scene_id and r.amount_formula_code = f.formula_code) as rule_ref_count,
+               (select count(1)
+                from cost_publish_snapshot snap
+                join cost_publish_version ver on ver.version_id = snap.version_id
+                where ver.scene_id = f.scene_id
+                  and snap.snapshot_type = 'FORMULA'
+                  and snap.object_code = f.formula_code) as published_version_count,
+               (select coalesce(max(ver.version_no), 0)
+                from cost_formula_version ver
+                where ver.formula_id = f.formula_id) as current_version_no
+        from cost_formula f
+        left join cost_scene s on s.scene_id = f.scene_id
+    </sql>
+
+    <sql id="formulaWhere">
+        <where>
+            <if test="sceneId != null">
+                and f.scene_id = #{sceneId}
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and s.business_domain = #{businessDomain}
+            </if>
+            <if test="formulaCode != null and formulaCode != ''">
+                and f.formula_code like concat('%', #{formulaCode}, '%')
+            </if>
+            <if test="formulaName != null and formulaName != ''">
+                and f.formula_name like concat('%', #{formulaName}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                and f.status = #{status}
+            </if>
+            <if test="returnType != null and returnType != ''">
+                and f.return_type = #{returnType}
+            </if>
+            <if test="assetType != null and assetType != ''">
+                and f.asset_type = #{assetType}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectFormulaList" parameterType="com.ruoyi.system.domain.cost.CostFormula" resultMap="CostFormulaResult">
+        <include refid="selectFormulaVo"/>
+        <include refid="formulaWhere"/>
+        order by s.scene_name asc, f.sort_no asc, f.formula_id desc
+    </select>
+
+    <select id="selectFormulaOptions" parameterType="com.ruoyi.system.domain.cost.CostFormula" resultMap="CostFormulaResult">
+        <include refid="selectFormulaVo"/>
+        <include refid="formulaWhere"/>
+        order by s.scene_name asc, f.sort_no asc, f.formula_id desc
+    </select>
+
+    <select id="selectTemplateOptions" parameterType="com.ruoyi.system.domain.cost.CostFormula" resultMap="CostFormulaResult">
+        <include refid="selectFormulaVo"/>
+        <where>
+            and f.asset_type = 'TEMPLATE'
+            and f.status = '0'
+            <if test="sceneId != null">
+                and f.scene_id = #{sceneId}
+            </if>
+            <if test="formulaCode != null and formulaCode != ''">
+                and f.formula_code like concat('%', #{formulaCode}, '%')
+            </if>
+            <if test="formulaName != null and formulaName != ''">
+                and f.formula_name like concat('%', #{formulaName}, '%')
+            </if>
+        </where>
+        order by s.scene_name asc, f.sort_no asc, f.formula_id desc
+    </select>
+
+    <select id="selectFormulaStats" parameterType="com.ruoyi.system.domain.cost.CostFormula" resultMap="CostFormulaStatsResult">
+        select count(1) as formulaCount,
+               coalesce(sum(case when f.status = '0' then 1 else 0 end), 0) as enabledFormulaCount,
+               coalesce(sum((select count(1) from cost_variable v where v.scene_id = f.scene_id and v.formula_code = f.formula_code)), 0) as variableRefCount,
+               coalesce(sum((select count(1) from cost_rule r where r.scene_id = f.scene_id and r.amount_formula_code = f.formula_code)), 0) as ruleRefCount
+        from cost_formula f
+        left join cost_scene s on s.scene_id = f.scene_id
+        <include refid="formulaWhere"/>
+    </select>
+
+    <select id="selectFormulaGovernanceCheck" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFormulaGovernanceCheckVo">
+        select f.formula_id as formulaId,
+               f.scene_id as sceneId,
+               f.formula_code as formulaCode,
+               f.formula_name as formulaName,
+               (select count(1) from cost_variable v where v.scene_id = f.scene_id and v.formula_code = f.formula_code) as variableRefCount,
+               (select count(1) from cost_rule r where r.scene_id = f.scene_id and r.amount_formula_code = f.formula_code) as ruleRefCount,
+               (select count(1)
+                from cost_publish_snapshot snap
+                join cost_publish_version ver on ver.version_id = snap.version_id
+                where ver.scene_id = f.scene_id
+                  and snap.snapshot_type = 'FORMULA'
+                  and snap.object_code = f.formula_code) as publishedVersionCount
+        from cost_formula f
+        where f.formula_id = #{formulaId}
+    </select>
+
+</mapper>
