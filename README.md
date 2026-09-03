@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `Mysql/` | 可集成 | 2026-09-02 已完成建表、场景、费目、要素、规则、发布、同步计费、失败日志、正式任务和结果台账回归 |
 | `Front/` | 可集成 | Vue 3 + Element Plus 可嵌入工作台，已在现有业务项目完成生产构建 |
-| `Oracle/` | 待第二次提交 | 当前只保留状态说明，Oracle DDL 和运行 SQL 未完成真实数据库回归前不会标记可用 |
+| `Oracle/` | 可集成 | 2026-09-02 已完成 Oracle DDL、Oracle 方言适配 Jar、场景/费目/要素/规则/发布与运行链路回归 |
 
 ## 目录边界
 
@@ -22,7 +22,12 @@ cost_platform_lite/
 │  ├─ sql/                   母体实体对齐的 MySQL 建表脚本
 │  └─ README.md              MySQL 完整集成教程
 ├─ Oracle/
-│  └─ README.md              Oracle 交付状态与后续教程入口
+│  ├─ backend-integration/   Java 8 兼容 Client 与 Spring Boot Starter
+│  ├─ bin/                   Oracle 运行脚本
+│  ├─ config/                Oracle 运行端与宿主端配置样例
+│  ├─ runtime/               已验证的 Oracle 轻量计费运行 Jar
+│  ├─ sql/                   母体实体对齐的 Oracle 建表脚本
+│  └─ README.md              Oracle 完整集成教程
 ├─ Front/
 │  ├─ src/                   通用 Vue 工作台源码
 │  ├─ examples/              宿主页接入示例

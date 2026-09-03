@@ -1,0 +1,26 @@
+cost:
+  lite:
+    integration:
+      enabled: true
+      base-url: ${COST_LITE_BASE_URL:http://127.0.0.1:18082}
+      admin-token: ${COST_LITE_ADMIN_TOKEN:}
+      open-token: ${COST_LITE_OPEN_TOKEN:}
+      web-path: /cost-lite
+      proxy-enabled: true
+      connect-timeout: ${COST_LITE_CONNECT_TIMEOUT:5000}
+      read-timeout: ${COST_LITE_READ_TIMEOUT:30000}
+      max-retries: ${COST_LITE_MAX_RETRIES:0}
+      retry-backoff: ${COST_LITE_RETRY_BACKOFF:200}
+      max-response-bytes: ${COST_LITE_MAX_RESPONSE_BYTES:20971520}
+      response-mode: status
+
+# 业务系统字典与母体编码不一致时，只在宿主配置中增加映射；不要修改 cost_* 表字段。
+# cost:
+#   lite:
+#     dictionary:
+#       type-mappings:
+#         cost_scene_status: biz_scene_status
+#       value-mappings:
+#         cost_scene_status:
+#           "0": ENABLED
+#           "1": DISABLED
