@@ -1,13 +1,13 @@
 # Oracle 轻量计费接口文档
 
-本文档对应 `Oracle/runtime/cost-lite-server-1.0.0.jar`。Starter 代理和独立 Jar 的业务调用语义一致，区别只有 URL 前缀：
+本文档对应 `Oracle/runtime/cost-lite-server-1.0.0.jar`。Starter 代理和独立 Jar 使用同一套计费接口语义，宿主代理默认也使用 `/cost/**`，Starter 会把宿主请求转发到 Jar 的同名上游路径。宿主已有路径冲突时，只需通过 `web-path` 和前端 `basePath` 各调整一次。
 
-| 用途 | Starter 代理 | 独立 Jar |
+| 用途 | Starter 宿主入口 | 独立 Jar 入口 |
 | --- | --- | --- |
-| 管理/工作台 | `/cost-lite/**` | `/cost/**` |
-| 开放业务调用 | `/cost-lite/open/**` | `/cost/open/**` |
+| 管理/工作台 | `/cost/**` | `/cost/**` |
+| 开放业务调用 | `/cost/open/**` | `/cost/open/**` |
 
-嵌入业务项目时，优先使用管理/集成链路：业务项目引入 Starter 后由宿主权限保护 `/cost-lite/**`，Starter 使用配置中的 `admin-token` 调用 Jar；不需要创建 `openApp`。`/cost-lite/open/**` 只是可选的外部应用令牌模式，本教程的集成验证可以完全跳过。
+嵌入业务项目时，优先使用管理/集成链路：业务项目引入 Starter 后由宿主权限保护 `/cost/**`，Starter 使用配置中的 `admin-token` 调用 Jar；不需要创建 `openApp`。`/cost/open/**` 只是可选的外部应用令牌模式，本教程的集成验证可以完全跳过。
 
 ## 1. 调用边界
 
@@ -24,7 +24,7 @@
 
 ### 2.1 创建开放应用
 
-Starter：`POST /cost-lite/open-apps`；独立 Jar：`POST /cost/openApp`。
+Starter：`POST /cost/open-apps`；独立 Jar：`POST /cost/openApp`。
 
 ```json
 {
@@ -41,7 +41,7 @@ Starter：`POST /cost-lite/open-apps`；独立 Jar：`POST /cost/openApp`。
 
 ### 2.2 申请短期令牌
 
-Starter：`POST /cost-lite/open/token`；独立 Jar：`POST /cost/open/auth/token`。
+Starter：`POST /cost/open/token`；独立 Jar：`POST /cost/open/auth/token`。
 
 ```bash
 curl -X POST http://127.0.0.1:18082/cost/open/auth/token \
@@ -100,7 +100,7 @@ curl -H "X-Cost-Open-Token: $TOKEN" \
 
 ### 5.1 场景全费目
 
-Starter：`POST /cost-lite/open/calculate`；独立 Jar：`POST /cost/open/fee/calculate`。
+Starter：`POST /cost/open/calculate`；独立 Jar：`POST /cost/open/fee/calculate`。
 
 不传 `feeId`、`feeIds`、`feeCode` 时，按场景生效版本计算全部费目：
 
@@ -183,7 +183,7 @@ curl -X POST http://127.0.0.1:18082/cost/open/fee/calculate \
 
 ## 6. 工作台试算接口
 
-这组接口供工作台或受保护的管理端使用，不使用开放令牌。Starter：`POST /cost-lite/simulations`；独立 Jar：`POST /cost/run/simulation/execute`。
+这组接口供工作台或受保护的管理端使用，不使用开放令牌。Starter：`POST /cost/simulations`；独立 Jar：`POST /cost/run/simulation/execute`。
 
 请求体与同步计费相同，额外支持 `feeId`、`feeIds`、`feeCode` 指定试算范围，并支持 `includeExplain`：
 
@@ -207,11 +207,11 @@ curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
   "http://127.0.0.1:18082/cost/lite/billing-log/10001"
 ```
 
-Starter 代理对应路径为 `/cost-lite/logs` 和 `/cost-lite/logs/{simulationId}`。
+Starter 代理对应路径为 `/cost/logs` 和 `/cost/logs/{simulationId}`。
 
 ### 6.1 批量试算
 
-批量试算仍然走管理/集成链路，不依赖 `openApp`。Starter：`POST /cost-lite/simulations/batch`；独立 Jar：`POST /cost/run/simulation/batch-execute`。Starter 的上游管理令牌由 Starter 配置注入，独立 Jar 直接使用 `X-Cost-Lite-Token` 或 `Authorization: Bearer`：
+批量试算仍然走管理/集成链路，不依赖 `openApp`。Starter：`POST /cost/simulations/batch`；独立 Jar：`POST /cost/run/simulation/batch-execute`。Starter 的上游管理令牌由 Starter 配置注入，独立 Jar 直接使用 `X-Cost-Lite-Token` 或 `Authorization: Bearer`：
 
 ```bash
 curl -X POST http://127.0.0.1:18082/cost/run/simulation/batch-execute \
@@ -254,7 +254,7 @@ Map<String, Object> data = (Map<String, Object>) response.getBody().get("data");
 Object billingLogId = data.get("billingLogId");
 ```
 
-Starter 代理模式使用 `costLiteBaseUrl + "/cost-lite/calculate"`，并由 Starter 注入上游管理令牌；独立 Jar 模式使用 `costLiteBaseUrl + "/cost/run/fee/calculate"` 和 `X-Cost-Lite-Token`。批量试算把路径替换为 `/cost-lite/simulations/batch` 或 `/cost/run/simulation/batch-execute`，并把 `inputJson` 改成对象数组字符串。建议在业务服务中设置连接超时、读取超时、幂等业务号和失败重试策略；不要把失败重试做成无限重试。
+Starter 代理模式使用 `costLiteBaseUrl + "/cost/calculate"`，并由 Starter 注入上游管理令牌；独立 Jar 模式使用 `costLiteBaseUrl + "/cost/run/fee/calculate"` 和 `X-Cost-Lite-Token`。批量试算把路径替换为 `/cost/simulations/batch` 或 `/cost/run/simulation/batch-execute`，并把 `inputJson` 改成对象数组字符串。建议在业务服务中设置连接超时、读取超时、幂等业务号和失败重试策略；不要把失败重试做成无限重试。
 
 ## 8. 业务后端正式核算路径
 
@@ -262,12 +262,12 @@ Starter 代理模式使用 `costLiteBaseUrl + "/cost-lite/calculate"`，并由 S
 
 | 能力 | Starter 代理 | 独立 Jar |
 | --- | --- | --- |
-| 正式任务预检查 | `POST /cost-lite/tasks/precheck` | `POST /cost/run/task/precheck` |
-| 提交正式任务 | `POST /cost-lite/tasks` | `POST /cost/run/task/submit` |
-| 查询任务 | `GET /cost-lite/tasks/{taskId}` | `GET /cost/run/task/{taskId}` |
-| 结果分页 | `GET /cost-lite/results` | `GET /cost/run/result/list` |
-| 结果详情 | `GET /cost-lite/results/{resultId}` | `GET /cost/run/result/{resultId}` |
-| 规则/变量追溯 | `GET /cost-lite/traces/{traceId}` | `GET /cost/run/trace/{traceId}` |
+| 正式任务预检查 | `POST /cost/tasks/precheck` | `POST /cost/run/task/precheck` |
+| 提交正式任务 | `POST /cost/tasks` | `POST /cost/run/task/submit` |
+| 查询任务 | `GET /cost/tasks/{taskId}` | `GET /cost/run/task/{taskId}` |
+| 结果分页 | `GET /cost/results` | `GET /cost/run/result/list` |
+| 结果详情 | `GET /cost/results/{resultId}` | `GET /cost/run/result/{resultId}` |
+| 规则/变量追溯 | `GET /cost/traces/{traceId}` | `GET /cost/run/trace/{traceId}` |
 
 正式单笔请求示例（字段以 `CostCalcTaskSubmitBo` 为准）：
 

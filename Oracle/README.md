@@ -2,12 +2,16 @@
 
 接口字段、场景级调用、指定费目调用和 Java/cURL 示例见：[Oracle/API.md](API.md)。
 
-本目录是可直接交付给第三方业务系统的 Oracle 集成包。运行端以独立 Jar 交付，宿主系统可选择通过 HTTP 直连 Jar，或引入 `cost-lite-spring-boot-starter` 暴露同源代理。仓库只保存集成所需的 SQL、配置、脚本、Client、Starter 和运行制品，不包含母体平台源码或第三方项目源码。
+本目录是可直接交付给第三方业务系统的 Oracle 集成包。运行端以独立 Jar 交付，宿主系统可选择通过 HTTP 直连 Jar，或引入 `cost-lite-spring-boot-starter` 暴露同源代理。`source/` 保存本仓库维护用的 Oracle 计费核心源码；客户迁移只使用 Jar、Starter、前端、配置和 SQL，不需要复制源码。
 
 ## 1. 交付内容
 
 ```text
 Oracle/
+├─ source/                              Oracle 计费核心源码和独立构建入口
+│  ├─ src/
+│  ├─ pom.xml
+│  └─ README.md
 ├─ backend-integration/
 │  ├─ cost-lite-client/                 Java 8 兼容 HTTP Client
 │  └─ cost-lite-spring-boot-starter/    可选 Spring Boot 代理 Starter
@@ -139,6 +143,16 @@ bash Oracle/bin/start-cost-lite.sh
 
 复制 `Oracle/config/runtime.env.example` 到部署目录后逐项替换占位值，再由部署平台加载。不要把真实密码、Token、钱包文件路径或客户数据提交到 Git。
 
+### 4.4 在本仓库重新构建 Oracle Jar
+
+只有修改计费核心、公式引擎或 Oracle 方言兼容逻辑时才执行本节。客户业务项目不要复制 `Oracle/source/`，仍然直接使用 `Oracle/runtime/` 中的已验证 Jar。
+
+```bash
+mvn -f Oracle/source/pom.xml clean package -DskipTests
+```
+
+完整回归通过后，把 `Oracle/source/target/cost-lite-server.jar` 发布为 `Oracle/runtime/cost-lite-server-1.0.0.jar`，再重新计算 `Oracle/runtime/SHA256SUMS`。`source/target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
+
 ## 5. 验证运行服务
 
 ```bash
@@ -204,19 +218,19 @@ cost:
       base-url: ${COST_LITE_BASE_URL:http://127.0.0.1:18082}
       admin-token: ${COST_LITE_ADMIN_TOKEN:}
       open-token: ${COST_LITE_OPEN_TOKEN:}
-      web-path: /cost-lite
+      web-path: /cost
       proxy-enabled: true
       connect-timeout: 5000
       read-timeout: 30000
       max-retries: 0
 ```
 
-Starter 只负责稳定代理和响应适配，不接管宿主登录、角色和菜单权限。宿主按自己的安全框架保护 `/cost-lite/**`，因此 RuoYi、Spring Cloud 或其他成熟框架都可以接入。
+Starter 只负责稳定代理和响应适配，不接管宿主登录、角色和菜单权限。宿主按自己的安全框架保护 `/cost/**`，因此 RuoYi、Spring Cloud 或其他成熟框架都可以接入。
 
 宿主启动后检查：
 
 ```bash
-curl http://127.0.0.1:8080/cost-lite/health
+curl http://127.0.0.1:8080/cost/health
 ```
 
 ## 7. 前端接入
@@ -226,7 +240,7 @@ curl http://127.0.0.1:8080/cost-lite/health
 ```ts
 const costLiteApi = createCostLiteApi(
   (config) => request(config),
-  { basePath: "/cost-lite", routeMode: "proxy" },
+  { basePath: "/cost", routeMode: "proxy" },
 );
 ```
 
@@ -363,15 +377,15 @@ GET /cost/run/trace/{traceId}
 
 ### 9.5 场景级业务系统调用
 
-业务项目内嵌集成时，业务后端引入 Starter 并调用稳定的 `/cost-lite/**` 路径；Starter 连接独立 Jar 时使用配置中的 `base-url` 和 `admin-token`，业务代码不接触数据库账号，也不需要创建 `openApp`。独立 Jar 部署则直接调用 `/cost/**` 管理路径。建议缓存“场景 -> 生效版本 -> 费目”的解析结果，交易时只传稳定的 `sceneId`、`versionId`、`feeId` 和输入数据。
+业务项目内嵌集成时，业务后端引入 Starter 并调用稳定的 `/cost/**` 路径；Starter 连接独立 Jar 时使用配置中的 `base-url` 和 `admin-token`，业务代码不接触数据库账号，也不需要创建 `openApp`。独立 Jar 部署则直接调用 `/cost/**` 管理路径。建议缓存“场景 -> 生效版本 -> 费目”的解析结果，交易时只传稳定的 `sceneId`、`versionId`、`feeId` 和输入数据。
 
 | 能力 | Starter 代理 | 独立 Jar |
 | --- | --- | --- |
-| 查询场景 | `GET /cost-lite/scenes` | `GET /cost/scene/list` |
-| 查询场景版本 | `GET /cost-lite/scenes/{sceneId}/versions` | `GET /cost/run/version-options/{sceneId}` |
-| 查询场景费目 | `GET /cost-lite/fees?sceneId={sceneId}` | `GET /cost/fee/list?sceneId={sceneId}` |
-| 场景级同步计费 | `POST /cost-lite/calculate` | `POST /cost/run/fee/calculate` |
-| 批量试算 | `POST /cost-lite/simulations/batch` | `POST /cost/run/simulation/batch-execute` |
+| 查询场景 | `GET /cost/scenes` | `GET /cost/scene/list` |
+| 查询场景版本 | `GET /cost/scenes/{sceneId}/versions` | `GET /cost/run/version-options/{sceneId}` |
+| 查询场景费目 | `GET /cost/fees?sceneId={sceneId}` | `GET /cost/fee/list?sceneId={sceneId}` |
+| 场景级同步计费 | `POST /cost/calculate` | `POST /cost/run/fee/calculate` |
+| 批量试算 | `POST /cost/simulations/batch` | `POST /cost/run/simulation/batch-execute` |
 
 如确实需要把计费服务作为跨系统开放 API，再启用下面的开放应用令牌模式；它是可选兼容能力，不是内嵌 Starter 集成的前置条件：
 
@@ -404,7 +418,7 @@ curl -H "X-Cost-Open-Token: $TOKEN" \
   "http://127.0.0.1:18082/cost/open/scenes/1/fees?versionId=1&snapshotMode=ACTIVE"
 ```
 
-Starter 代理下将上面的路径分别替换为 `/cost-lite/open/token`、`/cost-lite/open/scenes`、`/cost-lite/open/scenes/{sceneId}/versions` 和 `/cost-lite/open/scenes/{sceneId}/fees`。令牌也支持 `Authorization: Bearer $TOKEN`；生产业务调用固定使用 `ACTIVE` 正式版本。
+Starter 代理下将上面的路径分别替换为 `/cost/open/token`、`/cost/open/scenes`、`/cost/open/scenes/{sceneId}/versions` 和 `/cost/open/scenes/{sceneId}/fees`。令牌也支持 `Authorization: Bearer $TOKEN`；生产业务调用固定使用 `ACTIVE` 正式版本。
 
 ### 9.6 指定费目的计算
 
@@ -440,7 +454,7 @@ GET /cost/lite/billing-log/list?sceneId=1&pageNum=1&pageSize=20
 GET /cost/lite/billing-log/{simulationId}
 ```
 
-Starter 代理对应为 `/cost-lite/logs` 和 `/cost-lite/logs/{simulationId}`。开放令牌不开放管理查询，避免把管理能力下发到浏览器；正式结果查询只属于后端扩展，不属于本工作台。
+Starter 代理对应为 `/cost/logs` 和 `/cost/logs/{simulationId}`。开放令牌不开放管理查询，避免把管理能力下发到浏览器；正式结果查询只属于后端扩展，不属于本工作台。
 
 ## 10. 公式与可插拔扩展
 
@@ -474,7 +488,7 @@ Starter 代理对应为 `/cost-lite/logs` 和 `/cost-lite/logs/{simulationId}`�
 
 Oracle Jar 内置 MyBatis 方言适配，会将母体 Mapper 使用的 `LIMIT`、函数和批量插入转换为 Oracle 语义。若仍失败，先检查 Jar SHA-256 是否与 `runtime/SHA256SUMS` 一致，再保留脱敏 SQL 日志反馈。
 
-### 宿主没有 `/cost-lite/**`
+### 宿主没有 `/cost/**`
 
 确认 Starter 进入运行时依赖、`cost.lite.integration.enabled=true`，并由宿主安全框架放行或授权对应路径。
 

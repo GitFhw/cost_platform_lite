@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostCalcTaskDetailMapper">
+
+    <resultMap id="CostTopErrorResult" type="java.util.LinkedHashMap">
+        <result property="message" column="message" />
+        <result property="count" column="count" />
+    </resultMap>
+
+    <insert id="insertBatch">
+        insert into cost_calc_task_detail (
+            task_id,
+            task_no,
+            biz_no,
+            partition_no,
+            detail_status,
+            retry_count,
+            input_json,
+            result_summary,
+            error_message
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.taskId},
+                #{item.taskNo},
+                #{item.bizNo},
+                #{item.partitionNo},
+                #{item.detailStatus},
+                #{item.retryCount},
+                #{item.inputJson},
+                #{item.resultSummary},
+                #{item.errorMessage}
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateBatchResult">
+        update cost_calc_task_detail
+        <trim prefix="set" suffixOverrides=",">
+            detail_status = case detail_id
+            <foreach collection="list" item="item">
+                when #{item.detailId} then #{item.detailStatus}
+            </foreach>
+            end,
+            result_summary = case detail_id
+            <foreach collection="list" item="item">
+                when #{item.detailId} then #{item.resultSummary}
+            </foreach>
+            end,
+            error_message = case detail_id
+            <foreach collection="list" item="item">
+                when #{item.detailId} then #{item.errorMessage}
+            </foreach>
+            end,
+            retry_count = case detail_id
+            <foreach collection="list" item="item">
+                when #{item.detailId} then #{item.retryCount}
+            </foreach>
+            end,
+            update_time = now()
+        </trim>
+        where detail_id in
+        <foreach collection="list" item="item" open="(" separator="," close=")">
+            #{item.detailId}
+        </foreach>
+    </update>
+
+    <select id="selectTopErrors" resultMap="CostTopErrorResult">
+        select error_message as message, count(1) as count
+        from cost_calc_task_detail
+        where task_id = #{taskId}
+          and detail_status = 'FAILED'
+          and length(trim(error_message)) > 0
+        group by error_message
+        order by count(1) desc
+        limit #{limit}
+    </select>
+
+</mapper>

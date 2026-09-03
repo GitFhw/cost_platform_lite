@@ -27,7 +27,7 @@
     {
       "name": "cost.lite.integration.web-path",
       "type": "java.lang.String",
-      "defaultValue": "/cost-lite"
+      "defaultValue": "/cost"
     },
     {
       "name": "cost.lite.integration.proxy-enabled",

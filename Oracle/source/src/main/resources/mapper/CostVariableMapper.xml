@@ -1,0 +1,218 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostVariableMapper">
+
+    <resultMap id="CostVariableResult" type="com.ruoyi.system.domain.cost.CostVariable">
+        <id property="variableId" column="variable_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="groupId" column="group_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="groupCode" column="group_code" />
+        <result property="groupName" column="group_name" />
+        <result property="variableCode" column="variable_code" />
+        <result property="variableName" column="variable_name" />
+        <result property="variableType" column="variable_type" />
+        <result property="sourceType" column="source_type" />
+        <result property="sourceSystem" column="source_system" />
+        <result property="dictType" column="dict_type" />
+        <result property="remoteApi" column="remote_api" />
+        <result property="requestMethod" column="request_method" />
+        <result property="contentType" column="content_type" />
+        <result property="queryConfigJson" column="query_config_json" />
+        <result property="requestHeadersJson" column="request_headers_json" />
+        <result property="bodyTemplateJson" column="body_template_json" />
+        <result property="authType" column="auth_type" />
+        <result property="authConfigJson" column="auth_config_json" />
+        <result property="dataPath" column="data_path" />
+        <result property="responseConfigJson" column="response_config_json" />
+        <result property="mappingConfigJson" column="mapping_config_json" />
+        <result property="pageConfigJson" column="page_config_json" />
+        <result property="adapterType" column="adapter_type" />
+        <result property="adapterConfigJson" column="adapter_config_json" />
+        <result property="syncMode" column="sync_mode" />
+        <result property="cachePolicy" column="cache_policy" />
+        <result property="fallbackPolicy" column="fallback_policy" />
+        <result property="formulaExpr" column="formula_expr" />
+        <result property="formulaCode" column="formula_code" />
+        <result property="formulaName" column="formula_name" />
+        <result property="businessFormula" column="business_formula" />
+        <result property="dataType" column="data_type" />
+        <result property="defaultValue" column="default_value" />
+        <result property="precisionScale" column="precision_scale" />
+        <result property="status" column="status" />
+        <result property="sortNo" column="sort_no" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <resultMap id="CostVariableStatsResult" type="java.util.LinkedHashMap">
+        <result property="variableCount" column="variableCount" />
+        <result property="enabledVariableCount" column="enabledVariableCount" />
+        <result property="remoteVariableCount" column="remoteVariableCount" />
+        <result property="formulaVariableCount" column="formulaVariableCount" />
+    </resultMap>
+
+    <sql id="selectVariableVo">
+        select v.variable_id,
+               v.scene_id,
+               v.group_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               g.group_code,
+               g.group_name,
+               v.variable_code,
+               v.variable_name,
+               v.variable_type,
+               v.source_type,
+               v.source_system,
+               v.dict_type,
+               v.remote_api,
+               v.request_method,
+               v.content_type,
+               v.query_config_json,
+               v.request_headers_json,
+               v.body_template_json,
+               v.auth_type,
+               v.auth_config_json,
+               v.data_path,
+               v.response_config_json,
+               v.mapping_config_json,
+               v.page_config_json,
+               v.adapter_type,
+               v.adapter_config_json,
+               v.sync_mode,
+               v.cache_policy,
+               v.fallback_policy,
+               v.formula_expr,
+               v.formula_code,
+               fm.formula_name,
+               fm.business_formula,
+               v.data_type,
+               v.default_value,
+               v.precision_scale,
+               v.status,
+               v.sort_no,
+               v.remark,
+               v.create_by,
+               v.create_time,
+               v.update_by,
+               v.update_time
+        from cost_variable v
+        left join cost_scene s on s.scene_id = v.scene_id
+        left join cost_variable_group g on g.group_id = v.group_id
+        left join cost_formula fm on fm.scene_id = v.scene_id and fm.formula_code = v.formula_code
+    </sql>
+
+    <sql id="variableWhere">
+        <where>
+            <if test="sceneId != null">
+                and v.scene_id = #{sceneId}
+            </if>
+            <if test="groupId != null">
+                and v.group_id = #{groupId}
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and s.business_domain = #{businessDomain}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    v.variable_code like concat('%', #{keyword}, '%')
+                    or v.variable_name like concat('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="variableCode != null and variableCode != ''">
+                and v.variable_code like concat('%', #{variableCode}, '%')
+            </if>
+            <if test="variableName != null and variableName != ''">
+                and v.variable_name like concat('%', #{variableName}, '%')
+            </if>
+            <if test="variableType != null and variableType != ''">
+                and v.variable_type = #{variableType}
+            </if>
+            <if test="sourceType != null and sourceType != ''">
+                and v.source_type = #{sourceType}
+            </if>
+            <if test="sourceSystem != null and sourceSystem != ''">
+                and v.source_system like concat('%', #{sourceSystem}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                and v.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectVariableList" parameterType="com.ruoyi.system.domain.cost.CostVariable" resultMap="CostVariableResult">
+        <include refid="selectVariableVo"/>
+        <include refid="variableWhere"/>
+        order by s.scene_name asc, g.sort_no asc, v.sort_no asc, v.variable_id asc
+    </select>
+
+    <select id="selectVariableOptions" parameterType="com.ruoyi.system.domain.cost.CostVariable" resultMap="CostVariableResult">
+        <include refid="selectVariableVo"/>
+        <include refid="variableWhere"/>
+        order by s.scene_name asc, g.sort_no asc, v.sort_no asc, v.variable_id asc
+    </select>
+
+    <select id="selectVariableStats" parameterType="com.ruoyi.system.domain.cost.CostVariable" resultMap="CostVariableStatsResult">
+        select count(1) as variableCount,
+               coalesce(sum(case when v.status = '0' then 1 else 0 end), 0) as enabledVariableCount,
+               coalesce(sum(case when v.source_type = 'REMOTE' then 1 else 0 end), 0) as remoteVariableCount,
+               coalesce(sum(case when v.source_type = 'FORMULA' then 1 else 0 end), 0) as formulaVariableCount
+        from cost_variable v
+        left join cost_scene s on s.scene_id = v.scene_id
+        left join cost_variable_group g on g.group_id = v.group_id
+        <include refid="variableWhere"/>
+    </select>
+
+    <select id="selectVariableGovernanceCheck" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostVariableGovernanceCheckVo">
+        select v.variable_id as variableId,
+               v.scene_id as sceneId,
+               s.scene_code as sceneCode,
+               s.scene_name as sceneName,
+               v.variable_code as variableCode,
+               v.variable_name as variableName,
+               v.status as status,
+               v.source_type as sourceType,
+               v.formula_code as formulaCode,
+               fm.formula_name as formulaName,
+               (select count(1) from cost_fee_variable_rel rel where rel.variable_id = v.variable_id) as feeRelCount,
+               (select count(1) from cost_rule_condition cond where cond.scene_id = v.scene_id and cond.variable_code = v.variable_code) as ruleConditionCount,
+               (select count(1) from cost_rule r where r.scene_id = v.scene_id and r.quantity_variable_code = v.variable_code) as ruleQuantityCount,
+               (select count(1)
+                from cost_publish_snapshot snap
+                join cost_publish_version ver on ver.version_id = snap.version_id
+                where ver.scene_id = v.scene_id
+                  and snap.snapshot_type = 'VARIABLE'
+                  and snap.object_code = v.variable_code) as publishedVersionCount
+        from cost_variable v
+        left join cost_scene s on s.scene_id = v.scene_id
+        left join cost_formula fm on fm.scene_id = v.scene_id and fm.formula_code = v.formula_code
+        where v.variable_id = #{variableId}
+    </select>
+
+    <select id="countRemoteVariableByScene" parameterType="Long" resultType="long">
+        select count(1)
+        from cost_variable
+        where source_type = 'REMOTE'
+        <if test="sceneId != null">
+            and scene_id = #{sceneId}
+        </if>
+    </select>
+
+    <delete id="deleteFeeVariableRelByVariableIds">
+        delete from cost_fee_variable_rel
+        where variable_id in
+        <foreach collection="array" item="variableId" open="(" separator="," close=")">
+            #{variableId}
+        </foreach>
+    </delete>
+
+</mapper>

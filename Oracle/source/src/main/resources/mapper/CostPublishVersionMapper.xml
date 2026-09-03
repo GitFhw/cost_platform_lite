@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostPublishVersionMapper">
+
+    <resultMap id="CostPublishVersionResult" type="com.ruoyi.system.domain.cost.CostPublishVersion">
+        <id property="versionId" column="version_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="versionNo" column="version_no" />
+        <result property="versionStatus" column="version_status" />
+        <result property="publishDesc" column="publish_desc" />
+        <result property="validationResultJson" column="validation_result_json" />
+        <result property="snapshotHash" column="snapshot_hash" />
+        <result property="publishedBy" column="published_by" />
+        <result property="publishedTime" column="published_time" />
+        <result property="activatedBy" column="activated_by" />
+        <result property="activatedTime" column="activated_time" />
+        <result property="rollbackBy" column="rollback_by" />
+        <result property="rollbackTime" column="rollback_time" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="activeFlag" column="active_flag" />
+        <result property="previousVersionId" column="previous_version_id" />
+        <result property="previousVersionNo" column="previous_version_no" />
+    </resultMap>
+
+    <resultMap id="CostPublishSnapshotResult" type="com.ruoyi.system.domain.cost.CostPublishSnapshot">
+        <id property="snapshotId" column="snapshot_id" />
+        <result property="versionId" column="version_id" />
+        <result property="snapshotType" column="snapshot_type" />
+        <result property="objectCode" column="object_code" />
+        <result property="objectName" column="object_name" />
+        <result property="snapshotJson" column="snapshot_json" />
+        <result property="sortNo" column="sort_no" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <resultMap id="CostPublishStatsResult" type="java.util.LinkedHashMap">
+        <result property="sceneCount" column="sceneCount" />
+        <result property="versionCount" column="versionCount" />
+        <result property="activeVersionCount" column="activeVersionCount" />
+        <result property="rolledBackVersionCount" column="rolledBackVersionCount" />
+    </resultMap>
+
+    <resultMap id="CostPublishMissingFeeResult" type="java.util.LinkedHashMap">
+        <result property="feeId" column="feeId" />
+        <result property="feeCode" column="feeCode" />
+        <result property="feeName" column="feeName" />
+    </resultMap>
+
+    <resultMap id="CostPublishMissingTierResult" type="java.util.LinkedHashMap">
+        <result property="ruleId" column="ruleId" />
+        <result property="ruleCode" column="ruleCode" />
+        <result property="ruleName" column="ruleName" />
+    </resultMap>
+
+    <resultMap id="CostPublishConditionResult" type="java.util.LinkedHashMap">
+        <result property="ruleCode" column="ruleCode" />
+        <result property="ruleName" column="ruleName" />
+        <result property="feeCode" column="feeCode" />
+        <result property="feeName" column="feeName" />
+        <result property="groupNo" column="groupNo" />
+        <result property="sortNo" column="sortNo" />
+        <result property="variableCode" column="variableCode" />
+        <result property="displayName" column="displayName" />
+        <result property="operatorCode" column="operatorCode" />
+        <result property="compareValue" column="compareValue" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <resultMap id="CostPublishTierResult" type="java.util.LinkedHashMap">
+        <result property="ruleCode" column="ruleCode" />
+        <result property="ruleName" column="ruleName" />
+        <result property="feeCode" column="feeCode" />
+        <result property="feeName" column="feeName" />
+        <result property="tierNo" column="tierNo" />
+        <result property="startValue" column="startValue" />
+        <result property="endValue" column="endValue" />
+        <result property="rateValue" column="rateValue" />
+        <result property="intervalMode" column="intervalMode" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectPublishVo">
+        select v.version_id,
+               v.scene_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               v.version_no,
+               v.version_status,
+               v.publish_desc,
+               v.validation_result_json,
+               v.snapshot_hash,
+               v.published_by,
+               v.published_time,
+               v.activated_by,
+               v.activated_time,
+               v.rollback_by,
+               v.rollback_time,
+               v.create_by,
+               v.create_time,
+               v.update_by,
+               v.update_time,
+               case when s.active_version_id = v.version_id then 1 else 0 end as active_flag,
+               (select pv.version_id
+                from cost_publish_version pv
+                where pv.scene_id = v.scene_id
+                  and pv.version_id &lt; v.version_id
+                order by pv.version_id desc
+                limit 1) as previous_version_id,
+               (select pv.version_no
+                from cost_publish_version pv
+                where pv.scene_id = v.scene_id
+                  and pv.version_id &lt; v.version_id
+                order by pv.version_id desc
+                limit 1) as previous_version_no
+        from cost_publish_version v
+        left join cost_scene s on s.scene_id = v.scene_id
+    </sql>
+
+    <sql id="publishWhere">
+        <where>
+            <if test="sceneId != null">
+                and v.scene_id = #{sceneId}
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and s.business_domain = #{businessDomain}
+            </if>
+            <if test="versionNo != null and versionNo != ''">
+                and v.version_no like concat('%', #{versionNo}, '%')
+            </if>
+            <if test="versionStatus != null and versionStatus != ''">
+                and v.version_status = #{versionStatus}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPublishVersionList" parameterType="com.ruoyi.system.domain.cost.CostPublishVersion" resultMap="CostPublishVersionResult">
+        <include refid="selectPublishVo" />
+        <include refid="publishWhere" />
+        order by v.published_time desc, v.version_id desc
+    </select>
+
+    <select id="selectPublishStats" parameterType="com.ruoyi.system.domain.cost.CostPublishVersion" resultMap="CostPublishStatsResult">
+        select count(distinct v.scene_id) as sceneCount,
+               count(1) as versionCount,
+               coalesce(sum(case when v.version_status = 'ACTIVE' then 1 else 0 end), 0) as activeVersionCount,
+               coalesce(sum(case when v.version_status = 'ROLLED_BACK' then 1 else 0 end), 0) as rolledBackVersionCount
+        from cost_publish_version v
+        left join cost_scene s on s.scene_id = v.scene_id
+        <include refid="publishWhere" />
+    </select>
+
+    <select id="selectPublishVersionDetail" parameterType="Long" resultMap="CostPublishVersionResult">
+        <include refid="selectPublishVo" />
+        where v.version_id = #{versionId}
+    </select>
+
+    <select id="selectLatestVersionByScene" parameterType="Long" resultMap="CostPublishVersionResult">
+        <include refid="selectPublishVo" />
+        where v.scene_id = #{sceneId}
+        order by v.version_id desc
+        limit 1
+    </select>
+
+    <select id="selectActiveVersionByScene" parameterType="Long" resultMap="CostPublishVersionResult">
+        <include refid="selectPublishVo" />
+        where s.active_version_id = v.version_id
+          and v.scene_id = #{sceneId}
+        limit 1
+    </select>
+
+    <select id="selectPreviousVersion" resultMap="CostPublishVersionResult">
+        <include refid="selectPublishVo" />
+        where v.scene_id = #{sceneId}
+          and v.version_id &lt; #{versionId}
+        order by v.version_id desc
+        limit 1
+    </select>
+
+    <select id="selectMonthlyVersionSequence" resultType="long">
+        select count(1)
+        from cost_publish_version
+        where scene_id = #{sceneId}
+          and version_no like concat(#{versionPrefix}, '%')
+    </select>
+
+    <select id="selectEnabledFeesWithoutRule" parameterType="Long" resultMap="CostPublishMissingFeeResult">
+        select f.fee_id as feeId,
+               f.fee_code as feeCode,
+               f.fee_name as feeName
+        from cost_fee_item f
+        left join cost_rule r on r.fee_id = f.fee_id and r.status = '0'
+        where f.scene_id = #{sceneId}
+          and f.status = '0'
+        group by f.fee_id, f.fee_code, f.fee_name, f.sort_no
+        having count(r.rule_id) = 0
+        order by f.sort_no asc, f.fee_id asc
+    </select>
+
+    <select id="selectTierRulesWithoutTier" parameterType="Long" resultMap="CostPublishMissingTierResult">
+        select r.rule_id as ruleId,
+               r.rule_code as ruleCode,
+               r.rule_name as ruleName
+        from cost_rule r
+        left join cost_rule_tier t on t.rule_id = r.rule_id
+        left join cost_fee_item f on f.fee_id = r.fee_id
+        where r.scene_id = #{sceneId}
+          and r.status = '0'
+          and r.rule_type = 'TIER_RATE'
+          and f.status = '0'
+        group by r.rule_id, r.rule_code, r.rule_name, r.priority, r.sort_no
+        having count(t.tier_id) = 0
+        order by r.priority desc, r.sort_no asc, r.rule_id asc
+    </select>
+
+    <select id="selectRuleConditionsForPublish" parameterType="Long" resultMap="CostPublishConditionResult">
+        select r.rule_code as ruleCode,
+               r.rule_name as ruleName,
+               f.fee_code as feeCode,
+               f.fee_name as feeName,
+               c.group_no as groupNo,
+               c.sort_no as sortNo,
+               c.variable_code as variableCode,
+               c.display_name as displayName,
+               c.operator_code as operatorCode,
+               c.compare_value as compareValue,
+               c.status as status,
+               c.remark as remark
+        from cost_rule_condition c
+        join cost_rule r on r.rule_id = c.rule_id and r.status = '0'
+        join cost_fee_item f on f.fee_id = r.fee_id and f.status = '0'
+        where c.scene_id = #{sceneId}
+        order by f.sort_no asc, r.priority desc, r.sort_no asc, c.group_no asc, c.sort_no asc, c.condition_id asc
+    </select>
+
+    <select id="selectRuleTiersForPublish" parameterType="Long" resultMap="CostPublishTierResult">
+        select r.rule_code as ruleCode,
+               r.rule_name as ruleName,
+               f.fee_code as feeCode,
+               f.fee_name as feeName,
+               t.tier_no as tierNo,
+               t.start_value as startValue,
+               t.end_value as endValue,
+               t.rate_value as rateValue,
+               t.interval_mode as intervalMode,
+               t.status as status,
+               t.remark as remark
+        from cost_rule_tier t
+        join cost_rule r on r.rule_id = t.rule_id and r.status = '0'
+        join cost_fee_item f on f.fee_id = r.fee_id and f.status = '0'
+        where t.scene_id = #{sceneId}
+        order by f.sort_no asc, r.priority desc, r.sort_no asc, t.tier_no asc, t.tier_id asc
+    </select>
+
+    <select id="selectSnapshotList" resultMap="CostPublishSnapshotResult">
+        select snapshot_id,
+               version_id,
+               snapshot_type,
+               object_code,
+               object_name,
+               snapshot_json,
+               sort_no,
+               create_by,
+               create_time
+        from cost_publish_snapshot
+        where version_id = #{versionId}
+        <if test="snapshotType != null and snapshotType != ''">
+            and snapshot_type = #{snapshotType}
+        </if>
+        order by sort_no asc, snapshot_id asc
+    </select>
+
+</mapper>

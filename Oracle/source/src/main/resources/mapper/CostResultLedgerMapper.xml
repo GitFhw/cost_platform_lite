@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostResultLedgerMapper">
+
+    <resultMap id="CostResultStatsResult" type="java.util.LinkedHashMap">
+        <result property="resultCount" column="resultCount" />
+        <result property="taskCount" column="taskCount" />
+        <result property="traceCount" column="traceCount" />
+        <result property="abnormalCount" column="abnormalCount" />
+        <result property="amountTotal" column="amountTotal" />
+    </resultMap>
+
+    <resultMap id="CostFeeDistributionResult" type="java.util.LinkedHashMap">
+        <result property="feeCode" column="feeCode" />
+        <result property="feeName" column="feeName" />
+        <result property="resultCount" column="resultCount" />
+        <result property="amountTotal" column="amountTotal" />
+    </resultMap>
+
+    <resultMap id="CostObjectDistributionResult" type="java.util.LinkedHashMap">
+        <result property="objectDimension" column="objectDimension" />
+        <result property="objectCount" column="objectCount" />
+        <result property="resultCount" column="resultCount" />
+        <result property="amountTotal" column="amountTotal" />
+    </resultMap>
+
+    <insert id="insertBatch">
+        insert into cost_result_ledger (
+            result_id,
+            task_id,
+            task_no,
+            scene_id,
+            version_id,
+            fee_id,
+            fee_code,
+            fee_name,
+            biz_no,
+            bill_month,
+            object_dimension,
+            object_code,
+            object_name,
+            quantity_value,
+            unit_price,
+            amount_value,
+            currency_code,
+            result_status,
+            trace_id
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.resultId},
+                #{item.taskId},
+                #{item.taskNo},
+                #{item.sceneId},
+                #{item.versionId},
+                #{item.feeId},
+                #{item.feeCode},
+                #{item.feeName},
+                #{item.bizNo},
+                #{item.billMonth},
+                #{item.objectDimension},
+                #{item.objectCode},
+                #{item.objectName},
+                #{item.quantityValue},
+                #{item.unitPrice},
+                #{item.amountValue},
+                #{item.currencyCode},
+                #{item.resultStatus},
+                #{item.traceId}
+            )
+        </foreach>
+    </insert>
+
+    <select id="countBySceneAndBillMonth" resultType="java.lang.Long">
+        select count(1)
+        from cost_result_ledger
+        where scene_id = #{sceneId}
+          and bill_month = #{billMonth}
+    </select>
+
+    <select id="sumAmountBySceneAndBillMonth" resultType="java.math.BigDecimal">
+        select coalesce(sum(amount_value), 0)
+        from cost_result_ledger
+        where scene_id = #{sceneId}
+          and bill_month = #{billMonth}
+    </select>
+
+    <select id="sumAmountByTaskId" resultType="java.math.BigDecimal">
+        select coalesce(sum(amount_value), 0)
+        from cost_result_ledger
+        where task_id = #{taskId}
+    </select>
+
+    <sql id="resultLedgerWhere">
+        <where>
+            <if test="query.taskId != null">
+                and task_id = #{query.taskId}
+            </if>
+            <if test="requestTaskIds != null and requestTaskIds.size() > 0">
+                and task_id in
+                <foreach collection="requestTaskIds" item="taskId" open="(" separator="," close=")">
+                    #{taskId}
+                </foreach>
+            </if>
+            <if test="query.sceneId != null">
+                and scene_id = #{query.sceneId}
+            </if>
+            <if test="query.versionId != null">
+                and version_id = #{query.versionId}
+            </if>
+            <if test="query.feeId != null">
+                and fee_id = #{query.feeId}
+            </if>
+            <if test="query.billMonth != null and query.billMonth != ''">
+                and bill_month = #{query.billMonth}
+            </if>
+            <if test="query.taskNo != null and query.taskNo != ''">
+                and task_no = #{query.taskNo}
+            </if>
+            <if test="query.feeCode != null and query.feeCode != ''">
+                and fee_code = #{query.feeCode}
+            </if>
+            <if test="query.objectCode != null and query.objectCode != ''">
+                and object_code = #{query.objectCode}
+            </if>
+            <if test="query.objectName != null and query.objectName != ''">
+                and object_name like concat('%', #{query.objectName}, '%')
+            </if>
+            <if test="query.bizNo != null and query.bizNo != ''">
+                and biz_no = #{query.bizNo}
+            </if>
+            <if test="query.resultStatus != null and query.resultStatus != ''">
+                and result_status = #{query.resultStatus}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectStats" resultMap="CostResultStatsResult">
+        select count(1) as resultCount,
+               count(distinct task_id) as taskCount,
+               count(distinct trace_id) as traceCount,
+               sum(case when result_status is not null and result_status != 'SUCCESS' then 1 else 0 end) as abnormalCount,
+               coalesce(sum(amount_value), 0) as amountTotal
+        from cost_result_ledger
+        <include refid="resultLedgerWhere" />
+    </select>
+
+    <select id="selectFeeDistribution" resultMap="CostFeeDistributionResult">
+        select fee_code as feeCode,
+               max(fee_name) as feeName,
+               count(1) as resultCount,
+               coalesce(sum(amount_value), 0) as amountTotal
+        from cost_result_ledger
+        <include refid="resultLedgerWhere" />
+        group by fee_code
+        order by amountTotal desc, resultCount desc
+        limit 8
+    </select>
+
+    <select id="selectObjectDistribution" resultMap="CostObjectDistributionResult">
+        select coalesce(nullif(object_dimension, ''), '未设置') as objectDimension,
+               count(distinct object_code) as objectCount,
+               count(1) as resultCount,
+               coalesce(sum(amount_value), 0) as amountTotal
+        from cost_result_ledger
+        <include refid="resultLedgerWhere" />
+        group by coalesce(nullif(object_dimension, ''), '未设置')
+        order by resultCount desc, amountTotal desc
+        limit 8
+    </select>
+
+</mapper>

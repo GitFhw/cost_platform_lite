@@ -5,7 +5,7 @@ cost:
       base-url: ${COST_LITE_BASE_URL:http://127.0.0.1:18082}
       admin-token: ${COST_LITE_ADMIN_TOKEN:}
       open-token: ${COST_LITE_OPEN_TOKEN:}
-      web-path: /cost-lite
+      web-path: /cost
       proxy-enabled: true
       connect-timeout: ${COST_LITE_CONNECT_TIMEOUT:5000}
       read-timeout: ${COST_LITE_READ_TIMEOUT:30000}

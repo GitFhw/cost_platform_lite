@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostSceneMapper">
+
+    <resultMap id="CostSceneResult" type="com.ruoyi.system.domain.cost.CostScene">
+        <id property="sceneId" column="scene_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="orgCode" column="org_code" />
+        <result property="sceneType" column="scene_type" />
+        <result property="defaultObjectDimension" column="default_object_dimension" />
+        <result property="activeVersionId" column="active_version_id" />
+        <result property="activeVersionNo" column="active_version_no" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <resultMap id="CostSceneStatsResult" type="java.util.LinkedHashMap">
+        <result property="sceneCount" column="sceneCount" />
+        <result property="enabledSceneCount" column="enabledSceneCount" />
+        <result property="businessDomainCount" column="businessDomainCount" />
+    </resultMap>
+
+    <sql id="selectSceneVo">
+        select s.scene_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               s.org_code,
+               s.scene_type,
+               s.default_object_dimension,
+               s.active_version_id,
+               pv.version_no as active_version_no,
+               s.status,
+               s.remark,
+               s.create_by,
+               s.create_time,
+               s.update_by,
+               s.update_time
+        from cost_scene s
+        left join cost_publish_version pv on pv.version_id = s.active_version_id
+    </sql>
+
+    <sql id="sceneWhere">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (s.scene_code like concat('%', #{keyword}, '%')
+                or s.scene_name like concat('%', #{keyword}, '%'))
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and s.business_domain = #{businessDomain}
+            </if>
+            <if test="sceneType != null and sceneType != ''">
+                and s.scene_type = #{sceneType}
+            </if>
+            <if test="orgCode != null and orgCode != ''">
+                and s.org_code = #{orgCode}
+            </if>
+            <if test="status != null and status != ''">
+                and s.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectSceneList" parameterType="com.ruoyi.system.domain.cost.CostScene" resultMap="CostSceneResult">
+        <include refid="selectSceneVo"/>
+        <include refid="sceneWhere"/>
+        order by s.update_time desc, s.scene_id desc
+    </select>
+
+    <select id="selectSceneOptions" parameterType="com.ruoyi.system.domain.cost.CostScene" resultMap="CostSceneResult">
+        <include refid="selectSceneVo"/>
+        <include refid="sceneWhere"/>
+        order by s.scene_name asc, s.scene_id asc
+    </select>
+
+    <select id="selectSceneStats" parameterType="com.ruoyi.system.domain.cost.CostScene" resultMap="CostSceneStatsResult">
+        select count(1) as sceneCount,
+               coalesce(sum(case when s.status = '0' then 1 else 0 end), 0) as enabledSceneCount,
+               count(distinct case when length(trim(s.business_domain)) > 0 then s.business_domain end) as businessDomainCount
+        from cost_scene s
+        <include refid="sceneWhere"/>
+    </select>
+
+    <select id="selectSceneGovernanceCheck" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo">
+        select s.scene_id as sceneId,
+               s.scene_code as sceneCode,
+               s.scene_name as sceneName,
+               s.business_domain as businessDomain,
+               s.default_object_dimension as defaultObjectDimension,
+               s.status as status,
+               s.active_version_id as activeVersionId,
+               active_ver.version_no as activeVersionNo,
+               (select count(1) from cost_fee_item f where f.scene_id = s.scene_id) as feeCount,
+               (select count(1)
+                from cost_variable_group g
+                where g.scene_id = s.scene_id
+                  and exists (select 1 from cost_variable v where v.group_id = g.group_id)) as variableGroupCount,
+               (select count(1) from cost_variable v where v.scene_id = s.scene_id) as variableCount,
+               (select count(1) from cost_rule r where r.scene_id = s.scene_id) as ruleCount,
+               (select count(1) from cost_publish_version p where p.scene_id = s.scene_id) as publishedVersionCount,
+               (select count(1) from cost_calc_task t where t.scene_id = s.scene_id) as taskCount,
+               (select count(1)
+                from cost_calc_task t
+                where t.scene_id = s.scene_id
+                  and t.task_status in ('INIT', 'RUNNING')) as runningTaskCount,
+               (select count(1)
+                from cost_calc_task t
+                where t.scene_id = s.scene_id
+                  and (t.task_status = 'FAILED' or coalesce(t.fail_count, 0) > 0)) as failedTaskCount,
+               (select count(1) from cost_result_ledger l where l.scene_id = s.scene_id) as resultLedgerCount,
+               (select count(1) from cost_simulation_record sr where sr.scene_id = s.scene_id) as simulationRecordCount,
+               (select count(1) from cost_calc_input_batch ib where ib.scene_id = s.scene_id) as inputBatchCount,
+               (select count(1) from cost_result_trace rt where rt.scene_id = s.scene_id) as traceCount
+        from cost_scene s
+        left join cost_publish_version active_ver on active_ver.version_id = s.active_version_id
+        where s.scene_id = #{sceneId}
+    </select>
+
+    <select id="selectRecentSceneTasks" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostSceneRecentTaskVo">
+        select t.task_id as taskId,
+               t.task_no as taskNo,
+               t.scene_id as sceneId,
+               t.version_id as versionId,
+               pv.version_no as versionNo,
+               t.task_type as taskType,
+               t.bill_month as billMonth,
+               t.source_count as sourceCount,
+               t.success_count as successCount,
+               t.fail_count as failCount,
+               t.task_status as taskStatus,
+               t.progress_percent as progressPercent,
+               t.started_time as startedTime,
+               t.finished_time as finishedTime,
+               t.duration_ms as durationMs,
+               t.request_no as requestNo,
+               t.execute_node as executeNode,
+               t.input_source_type as inputSourceType,
+               t.source_batch_no as sourceBatchNo,
+               t.error_message as errorMessage
+        from cost_calc_task t
+        left join cost_publish_version pv on pv.version_id = t.version_id
+        where t.scene_id = #{sceneId}
+        order by coalesce(t.started_time, t.create_time) desc, t.task_id desc
+        limit 5
+    </select>
+
+</mapper>
