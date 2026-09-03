@@ -27,7 +27,7 @@ import java.util.Map;
  * {@link CostLiteRouteResolver} 解析，因此不会把某个母体框架的 URL 写死在协议层。</p>
  */
 @RestController
-@RequestMapping("${cost.lite.integration.web-path:/cost-lite}")
+@RequestMapping("${cost.lite.integration.web-path:/cost}")
 public class CostLiteProxyController {
     private final CostLiteClient client;
     private final CostLiteProxyResponseFactory responseFactory;

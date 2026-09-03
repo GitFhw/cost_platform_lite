@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostCalcTaskPartitionMapper">
+
+    <insert id="insertBatch">
+        insert into cost_calc_task_partition (
+            task_id,
+            task_no,
+            partition_no,
+            start_item_no,
+            end_item_no,
+            partition_status,
+            total_count,
+            processed_count,
+            success_count,
+            fail_count,
+            amount_total,
+            last_error
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.taskId},
+                #{item.taskNo},
+                #{item.partitionNo},
+                #{item.startItemNo},
+                #{item.endItemNo},
+                #{item.partitionStatus},
+                #{item.totalCount},
+                #{item.processedCount},
+                #{item.successCount},
+                #{item.failCount},
+                #{item.amountTotal},
+                #{item.lastError}
+            )
+        </foreach>
+    </insert>
+
+    <select id="sumAmountByTaskId" resultType="java.math.BigDecimal">
+        select coalesce(sum(amount_total), 0)
+        from cost_calc_task_partition
+        where task_id = #{taskId}
+    </select>
+
+</mapper>

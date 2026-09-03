@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostAccessProfileMapper">
+
+    <resultMap id="CostAccessProfileResult" type="com.ruoyi.system.domain.cost.CostAccessProfile">
+        <id property="profileId" column="profile_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="feeId" column="fee_id" />
+        <result property="feeScopeType" column="fee_scope_type" />
+        <result property="feeIdsJson" column="fee_ids_json" />
+        <result property="versionId" column="version_id" />
+        <result property="profileCode" column="profile_code" />
+        <result property="profileName" column="profile_name" />
+        <result property="sourceType" column="source_type" />
+        <result property="taskType" column="task_type" />
+        <result property="requestMethod" column="request_method" />
+        <result property="endpointUrl" column="endpoint_url" />
+        <result property="authType" column="auth_type" />
+        <result property="authConfigJson" column="auth_config_json" />
+        <result property="fetchConfigJson" column="fetch_config_json" />
+        <result property="mappingJson" column="mapping_json" />
+        <result property="samplePayloadJson" column="sample_payload_json" />
+        <result property="sampleInputJson" column="sample_input_json" />
+        <result property="status" column="status" />
+        <result property="sortNo" column="sort_no" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="feeCode" column="fee_code" />
+        <result property="feeName" column="fee_name" />
+        <result property="versionNo" column="version_no" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectAccessProfileVo">
+        select p.profile_id,
+               p.scene_id,
+               p.fee_id,
+               p.fee_scope_type,
+               p.fee_ids_json,
+               p.version_id,
+               p.profile_code,
+               p.profile_name,
+               p.source_type,
+               p.task_type,
+               p.request_method,
+               p.endpoint_url,
+               p.auth_type,
+               p.auth_config_json,
+               p.fetch_config_json,
+               p.mapping_json,
+               p.sample_payload_json,
+               p.sample_input_json,
+               p.status,
+               p.sort_no,
+               p.remark,
+               p.create_by,
+               p.create_time,
+               p.update_by,
+               p.update_time,
+               s.scene_code,
+               s.scene_name,
+               f.fee_code,
+               f.fee_name,
+               v.version_no
+        from cost_access_profile p
+        left join cost_scene s on s.scene_id = p.scene_id
+        left join cost_fee_item f on f.fee_id = p.fee_id
+        left join cost_publish_version v on v.version_id = p.version_id
+    </sql>
+
+    <sql id="accessProfileWhere">
+        <where>
+            <if test="profileId != null">
+                and p.profile_id = #{profileId}
+            </if>
+            <if test="sceneId != null">
+                and p.scene_id = #{sceneId}
+            </if>
+            <if test="feeId != null">
+                and p.fee_id = #{feeId}
+            </if>
+            <if test="versionId != null">
+                and p.version_id = #{versionId}
+            </if>
+            <if test="sourceType != null and sourceType != ''">
+                and p.source_type = #{sourceType}
+            </if>
+            <if test="taskType != null and taskType != ''">
+                and p.task_type = #{taskType}
+            </if>
+            <if test="status != null and status != ''">
+                and p.status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    p.profile_code like concat('%', #{keyword}, '%')
+                    or p.profile_name like concat('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="profileCode != null and profileCode != ''">
+                and p.profile_code like concat('%', #{profileCode}, '%')
+            </if>
+            <if test="profileName != null and profileName != ''">
+                and p.profile_name like concat('%', #{profileName}, '%')
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectAccessProfileList" parameterType="com.ruoyi.system.domain.cost.CostAccessProfile" resultMap="CostAccessProfileResult">
+        <include refid="selectAccessProfileVo"/>
+        <include refid="accessProfileWhere"/>
+        order by p.sort_no asc, p.profile_id desc
+    </select>
+
+    <select id="selectAccessProfileById" parameterType="Long" resultMap="CostAccessProfileResult">
+        <include refid="selectAccessProfileVo"/>
+        where p.profile_id = #{profileId}
+        limit 1
+    </select>
+</mapper>
