@@ -8,8 +8,8 @@ import {
   watch,
 } from "vue";
 import {
-  Check,
   Coin,
+  CopyDocument,
   Connection,
   Delete,
   DocumentChecked,
@@ -53,6 +53,8 @@ const DICTIONARY_TYPES = [
   "cost_variable_cache_policy",
   "cost_variable_fallback_policy",
   "cost_variable_status",
+  "cost_formula_status",
+  "cost_formula_return_type",
   "cost_rule_status",
   "cost_rule_type",
   "cost_rule_condition_logic",
@@ -92,8 +94,9 @@ const loading = reactive({
   context: false,
   rules: false,
   logs: false,
-  results: false,
   detail: false,
+  formulaVersions: false,
+  formulaTesting: false,
   precheck: false,
   template: false,
   saving: false,
@@ -115,12 +118,25 @@ const rules = ref<CostLiteRecord[]>([]);
 const versions = ref<CostLiteRecord[]>([]);
 const formulaOptions = ref<CostLiteRecord[]>([]);
 const feeGovernance = ref<CostLiteRecord>({});
-const centerTab = ref<"fees" | "variables">("fees");
-const bottomTab = ref<"simulation" | "logs" | "results">("simulation");
+const formulaKeyword = ref("");
+const formulaDialogVisible = ref(false);
+const formulaFormRef = ref<FormInstance>();
+const formulaForm = reactive<CostLiteRecord>({});
+const formulaTestInputJson = ref("{\n  \"quantity\": 8\n}");
+const formulaTestResult = ref<CostLiteRecord>({});
+const formulaVersionDialogVisible = ref(false);
+const formulaVersions = ref<CostLiteRecord[]>([]);
+const formulaVersionFormula = ref<CostLiteRecord>({});
+const centerTab = ref<"fees" | "variables" | "formulas">("fees");
+const bottomTab = ref<"simulation" | "logs">("simulation");
 const detailVisible = ref(false);
 const detailTitle = ref("详情");
 const detailJson = ref<unknown>({});
 const precheckResult = ref<CostLiteRecord>({});
+const trialFeeId = ref<number | string>();
+const integrationDialogVisible = ref(false);
+const integrationExampleTab = ref<"request" | "starter" | "runtime">("request");
+const integrationExampleScope = ref<"scene" | "fee">("scene");
 
 const selectedScene = computed(() =>
   scenes.value.find((item) => String(item.sceneId) === String(selectedSceneId.value)),
@@ -143,6 +159,37 @@ const filteredScenes = computed(() => {
       .some((value) => String(value).toLowerCase().includes(keyword)),
   );
 });
+
+const filteredFormulas = computed(() => {
+  const keyword = formulaKeyword.value.trim().toLowerCase();
+  if (!keyword) {
+    return formulaOptions.value;
+  }
+  return formulaOptions.value.filter((item) =>
+    [item.formulaCode, item.formulaName, item.businessFormula, item.formulaExpr]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(keyword)),
+  );
+});
+
+const formulaStats = computed(() => ({
+  formulaCount: formulaOptions.value.length,
+  enabledFormulaCount: formulaOptions.value.filter((item) => String(item.status) === "0").length,
+  variableRefCount: formulaOptions.value.reduce((total, item) => total + Number(item.variableRefCount || 0), 0),
+  ruleRefCount: formulaOptions.value.reduce((total, item) => total + Number(item.ruleRefCount || 0), 0),
+}));
+
+const formulaManagementSupported = computed(() => Boolean(
+  resolvedApi.value?.getFormula
+  && resolvedApi.value?.getFormulaGovernance
+  && resolvedApi.value?.createFormula
+  && resolvedApi.value?.updateFormula
+  && resolvedApi.value?.deleteFormulas
+  && resolvedApi.value?.listFormulaVersions
+  && resolvedApi.value?.getFormulaVersion
+  && resolvedApi.value?.rollbackFormulaVersion
+  && resolvedApi.value?.testFormula,
+));
 
 const linkedVariableCodes = computed(() => {
   const codes = new Set<string>();
@@ -220,6 +267,18 @@ function sceneTypeText(sceneType: unknown): string {
   return dictLabel("cost_scene_type", sceneType);
 }
 
+function formulaReturnTypeText(returnType: unknown): string {
+  return dictLabel("cost_formula_return_type", returnType);
+}
+
+function formulaReferenceSummary(formula: CostLiteRecord): string {
+  const references: string[] = [];
+  if (Number(formula.variableRefCount || 0) > 0) references.push(`要素 ${formula.variableRefCount}`);
+  if (Number(formula.ruleRefCount || 0) > 0) references.push(`规则 ${formula.ruleRefCount}`);
+  if (Number(formula.publishedVersionCount || 0) > 0) references.push(`发布快照 ${formula.publishedVersionCount}`);
+  return references.length ? `引用：${references.join(" · ")}` : "暂未被要素或规则引用";
+}
+
 function statusTagType(dictType: string, value: unknown): "success" | "info" | "warning" | "danger" {
   const normalized = String(value ?? "");
   if (normalized === "0" || normalized === "SUCCESS" || normalized === "ACTIVE") return "success";
@@ -269,7 +328,7 @@ function governanceSummary(governance: CostLiteRecord): string {
     ["tierCount", "阶梯"],
     ["publishedVersionCount", "发布版本"],
     ["resultLedgerCount", "结果台账"],
-    ["simulationRecordCount", "调用日志"],
+    ["simulationRecordCount", "试算日志"],
     ["inputBatchCount", "输入批次"],
     ["traceCount", "结果追溯"],
     ["taskCount", "正式任务"],
@@ -321,7 +380,6 @@ async function initialize(): Promise<void> {
     dictionaryOptions.value = dictionaries;
     await loadScenes();
     if (bottomTab.value === "logs") await loadBillingLogs();
-    if (bottomTab.value === "results") await loadResults();
   } catch (error) {
     connected.value = false;
     ElMessage.error(errorMessage(error, "轻量计费服务连接失败"));
@@ -372,7 +430,11 @@ function clearSceneContext(): void {
   rules.value = [];
   versions.value = [];
   formulaOptions.value = [];
+  formulaVersions.value = [];
+  formulaVersionFormula.value = {};
   selectedFeeId.value = undefined;
+  trialFeeId.value = undefined;
+  integrationExampleScope.value = "scene";
   feeGovernance.value = {};
 }
 
@@ -458,15 +520,15 @@ function selectScene(scene: CostLiteRecord): void {
 
 function selectFee(fee: CostLiteRecord): void {
   selectedFeeId.value = fee.feeId;
+  trialFeeId.value = fee.feeId;
+  integrationExampleScope.value = "fee";
 }
 
 watch(selectedSceneId, () => {
   clearSceneContext();
   logQuery.pageNum = 1;
-  resultQuery.pageNum = 1;
   void loadSceneContext();
   if (bottomTab.value === "logs") void loadBillingLogs();
-  if (bottomTab.value === "results") void loadResults();
 });
 watch(selectedFeeId, () => void loadRules());
 
@@ -1150,6 +1212,221 @@ async function deleteRule(rule: CostLiteRecord): Promise<void> {
   }
 }
 
+const formulaRules: FormRules = {
+  formulaCode: [{ required: true, message: "请输入公式编码", trigger: "blur" }],
+  formulaName: [{ required: true, message: "请输入公式名称", trigger: "blur" }],
+  formulaExpr: [{ required: true, message: "请输入标准执行表达式", trigger: "blur" }],
+  returnType: [{ required: true, message: "请选择返回类型", trigger: "change" }],
+  status: [{ required: true, message: "请选择公式状态", trigger: "change" }],
+};
+
+function ensureFormulaManagement(): boolean {
+  if (formulaManagementSupported.value) return true;
+  ElMessage.error("当前 CostLiteApi 未提供完整的公式维护接口，请更新前端适配器");
+  return false;
+}
+
+function formatJsonValue(value: unknown, fallback: string): string {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function parseJsonObject(text: string, label: string): unknown {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(`${label}必须是合法 JSON`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label}必须是 JSON 对象`);
+  }
+  return parsed;
+}
+
+async function openFormulaDialog(formula?: CostLiteRecord): Promise<void> {
+  if (!selectedSceneId.value || !ensureFormulaManagement()) return;
+  const defaultInput = "{\n  \"quantity\": 8\n}";
+  resetObject(formulaForm, {
+    formulaId: formula?.formulaId,
+    sceneId: selectedSceneId.value,
+    formulaCode: formula?.formulaCode || "",
+    formulaName: formula?.formulaName || "",
+    formulaDesc: formula?.formulaDesc || "",
+    businessFormula: formula?.businessFormula || "",
+    formulaExpr: formula?.formulaExpr || "",
+    assetType: "FORMULA",
+    workbenchMode: "GUIDED",
+    workbenchPattern: "IF_ELSE",
+    templateCode: formula?.templateCode || "",
+    workbenchConfigJson: formula?.workbenchConfigJson || "",
+    namespaceScope: formula?.namespaceScope || "V,C,I,F,T",
+    returnType: formula?.returnType || "NUMBER",
+    testCaseJson: formula?.testCaseJson || "",
+    sampleResultJson: formula?.sampleResultJson || "",
+    lastTestTime: formula?.lastTestTime,
+    status: formula?.status ?? "0",
+    sortNo: Number(formula?.sortNo ?? 10),
+    remark: formula?.remark || "",
+  });
+  formulaTestInputJson.value = formatJsonValue(formula?.testCaseJson, defaultInput);
+  formulaTestResult.value = {};
+  formulaDialogVisible.value = true;
+  if (!formula?.formulaId || !api().getFormula) return;
+  loading.detail = true;
+  try {
+    const detail = await api().getFormula!(formula.formulaId);
+    resetObject(formulaForm, { ...formulaForm, ...detail, sceneId: selectedSceneId.value });
+    formulaTestInputJson.value = formatJsonValue(detail.testCaseJson, defaultInput);
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "公式详情加载失败"));
+  } finally {
+    loading.detail = false;
+  }
+}
+
+function buildFormulaPayload(): CostLiteRecord {
+  const payload = JSON.parse(JSON.stringify(formulaForm));
+  payload.sceneId = selectedSceneId.value;
+  payload.assetType = "FORMULA";
+  payload.workbenchMode = "GUIDED";
+  payload.workbenchPattern = "IF_ELSE";
+  payload.namespaceScope = String(payload.namespaceScope || "V,C,I,F,T").trim();
+  payload.formulaCode = String(payload.formulaCode || "").trim();
+  payload.formulaName = String(payload.formulaName || "").trim();
+  payload.formulaExpr = String(payload.formulaExpr || "").trim();
+  payload.businessFormula = String(payload.businessFormula || "").trim();
+  if (formulaTestInputJson.value.trim()) {
+    payload.testCaseJson = JSON.stringify(parseJsonObject(formulaTestInputJson.value, "测试输入"));
+  }
+  return payload;
+}
+
+async function saveFormula(): Promise<void> {
+  if (!ensureFormulaManagement()) return;
+  if (!(await formulaFormRef.value?.validate().catch(() => false))) return;
+  let payload: CostLiteRecord;
+  try {
+    payload = buildFormulaPayload();
+  } catch (error) {
+    ElMessage.error((error as Error).message);
+    return;
+  }
+  loading.saving = true;
+  try {
+    if (payload.formulaId) await api().updateFormula!(payload);
+    else await api().createFormula!(payload);
+    ElMessage.success("公式已保存，并已生成新的公式版本");
+    formulaDialogVisible.value = false;
+    await loadSceneContext(selectedFeeId.value);
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "公式保存失败"));
+  } finally {
+    loading.saving = false;
+  }
+}
+
+async function testFormula(): Promise<void> {
+  if (!ensureFormulaManagement() || !api().testFormula) return;
+  const formulaExpr = String(formulaForm.formulaExpr || "").trim();
+  if (!formulaExpr) {
+    ElMessage.warning("请先填写标准执行表达式");
+    return;
+  }
+  try {
+    parseJsonObject(formulaTestInputJson.value, "测试输入");
+  } catch (error) {
+    ElMessage.error((error as Error).message);
+    return;
+  }
+  loading.formulaTesting = true;
+  try {
+    // 使用当前编辑内容试算，避免编辑已有公式时误测数据库中的旧版本。
+    formulaTestResult.value = await api().testFormula!({
+      sceneId: selectedSceneId.value,
+      formulaExpr,
+      inputJson: formulaTestInputJson.value,
+      namespaceScope: String(formulaForm.namespaceScope || "V,C,I,F,T"),
+    });
+    ElMessage.success("公式试算通过");
+  } catch (error) {
+    formulaTestResult.value = {};
+    ElMessage.error(errorMessage(error, "公式试算失败"));
+  } finally {
+    loading.formulaTesting = false;
+  }
+}
+
+async function deleteFormula(formula: CostLiteRecord): Promise<void> {
+  if (!ensureFormulaManagement() || !api().getFormulaGovernance || !api().deleteFormulas) return;
+  const confirmed = await confirmGovernedDelete(
+    `公式“${formula.formulaName || formula.formulaCode}”`,
+    () => api().getFormulaGovernance!(formula.formulaId),
+  );
+  if (!confirmed) return;
+  try {
+    await api().deleteFormulas!([formula.formulaId]);
+    ElMessage.success("公式已删除");
+    await loadSceneContext(selectedFeeId.value);
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "公式删除失败"));
+  }
+}
+
+async function openFormulaVersions(formula: CostLiteRecord): Promise<void> {
+  if (!ensureFormulaManagement() || !api().listFormulaVersions) return;
+  formulaVersionFormula.value = formula;
+  formulaVersionDialogVisible.value = true;
+  loading.formulaVersions = true;
+  try {
+    formulaVersions.value = await api().listFormulaVersions!(formula.formulaId);
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "公式版本加载失败"));
+  } finally {
+    loading.formulaVersions = false;
+  }
+}
+
+async function showFormulaVersion(version: CostLiteRecord): Promise<void> {
+  if (!api().getFormulaVersion) return;
+  loading.detail = true;
+  try {
+    openJsonDetail(
+      `公式版本 V${version.versionNo || version.versionId}`,
+      await api().getFormulaVersion!(version.versionId),
+    );
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "公式版本详情加载失败"));
+  } finally {
+    loading.detail = false;
+  }
+}
+
+async function rollbackFormulaVersion(version: CostLiteRecord): Promise<void> {
+  if (!api().rollbackFormulaVersion) return;
+  const confirmed = await confirmAction(
+    `确认将公式 ${formulaVersionFormula.value.formulaCode || ""} 回退为 V${version.versionNo || version.versionId}？回退会生成新的当前版本。`,
+    "公式版本回退",
+    { confirmButtonText: "确认回退", cancelButtonText: "取消" },
+  );
+  if (!confirmed) return;
+  try {
+    await api().rollbackFormulaVersion!(version.versionId);
+    ElMessage.success("公式已回退，并已生成新的当前版本");
+    formulaVersionDialogVisible.value = false;
+    await loadSceneContext(selectedFeeId.value);
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "公式版本回退失败"));
+  }
+}
+
 const publishDialogVisible = ref(false);
 const publishFormRef = ref<FormInstance>();
 const publishForm = reactive<CostLiteRecord>({ publishDesc: "", activateNow: true });
@@ -1252,13 +1529,106 @@ const simulationForm = reactive<CostLiteRecord>({
 });
 const simulationResult = ref<CostLiteRecord>({});
 
+const integrationExample = computed(() => {
+  const sceneId = selectedSceneId.value || "<sceneId>";
+  const versionId = simulationForm.versionId || activeVersionId.value || "<versionId>";
+  const exampleFee = integrationExampleScope.value === "fee" ? selectedFee.value : undefined;
+  const input = (() => {
+    try {
+      return JSON.parse(simulationForm.inputJson);
+    } catch {
+      return { bizNo: "ORDER-001", objectCode: "ORDER-001", quantity: 1 };
+    }
+  })();
+  const payload: CostLiteRecord = {
+    sceneId,
+    versionId,
+    billMonth: simulationForm.billMonth || "2026-09",
+    inputJson: JSON.stringify(input),
+    includeExplain: false,
+  };
+  if (exampleFee?.feeId) {
+    payload.feeId = exampleFee.feeId;
+  }
+  const requestJson = JSON.stringify(payload, null, 2);
+  const baseUrl = typeof window === "undefined" ? "http://127.0.0.1:8080" : window.location.origin;
+  const starterEndpoint = `${baseUrl}/cost-lite/open/calculate`;
+  const runtimeEndpoint = `${baseUrl}/cost/open/fee/calculate`;
+  const shellBody = requestJson.replace(/'/g, "'\\''");
+  const starterCurl = [
+    `curl -X POST ${starterEndpoint}`,
+    '  -H "Content-Type: application/json"',
+    '  -H "X-Cost-Open-Token: $TOKEN"',
+    `  -d '${shellBody}'`,
+  ].join("\n");
+  const runtimeCurl = [
+    `curl -X POST ${runtimeEndpoint}`,
+    '  -H "Content-Type: application/json"',
+    '  -H "X-Cost-Open-Token: $TOKEN"',
+    `  -d '${shellBody}'`,
+  ].join("\n");
+  return {
+    sceneName: selectedScene.value?.sceneName || "当前场景",
+    sceneCode: selectedScene.value?.sceneCode || "-",
+    scope: integrationExampleScope.value,
+    feeName: exampleFee?.feeName || "场景全部费目",
+    feeCode: exampleFee?.feeCode || "ALL_FEES",
+    requestJson,
+    starterCurl,
+    runtimeCurl,
+    params: [
+      { name: "sceneId", required: "是", description: "场景主键，来自场景列表。" },
+      { name: "versionId", required: "是", description: "生产调用传生效版本主键，禁止业务系统自行读取配置表。" },
+      { name: "feeId", required: exampleFee?.feeId ? "当前示例已传" : "可选", description: "传入后只计算当前费目；不传则计算场景下全部费目。" },
+      { name: "billMonth", required: "是", description: "账期，格式 yyyy-MM。" },
+      { name: "inputJson", required: "是", description: "业务真实数据 JSON 字符串，字段以生成的费目模板为准。" },
+      { name: "includeExplain", required: "否", description: "是否返回规则、要素和定价解释，联调阶段建议 true。" },
+    ],
+  };
+});
+
+function trialScopeLabel(): string {
+  if (!trialFeeId.value) return "场景全部费目";
+  const fee = fees.value.find((item) => String(item.feeId) === String(trialFeeId.value));
+  return fee ? `指定费目：${fee.feeName}` : "场景全部费目";
+}
+
+function openIntegrationExample(): void {
+  if (!selectedSceneId.value) {
+    ElMessage.warning("请先选择场景");
+    return;
+  }
+  integrationExampleTab.value = "request";
+  integrationDialogVisible.value = true;
+}
+
+async function copyText(value: string): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    ElMessage.success("示例已复制");
+  } catch {
+    ElMessage.error("复制失败，请手动选择文本");
+  }
+}
+
 async function fillInputTemplate(): Promise<void> {
   if (!selectedSceneId.value) return;
   loading.template = true;
   try {
     const template = await api().getInputTemplate(
       selectedSceneId.value,
-      selectedFeeId.value ? [selectedFeeId.value] : undefined,
+      trialFeeId.value ? [trialFeeId.value] : undefined,
     );
     const value = template.inputJson || template.sampleInputJson || template.template || template;
     simulationForm.inputJson = typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -1278,7 +1648,7 @@ function validateInputJson(): unknown {
   }
 }
 
-async function runCalculate(mode: "calculate" | "simulation" | "task"): Promise<void> {
+async function runSimulation(): Promise<void> {
   if (!selectedSceneId.value) return;
   let parsed: unknown;
   try {
@@ -1289,49 +1659,16 @@ async function runCalculate(mode: "calculate" | "simulation" | "task"): Promise<
   }
   loading.running = true;
   try {
-    if (mode === "calculate") {
-      simulationResult.value = await api().calculate({
-        sceneId: selectedSceneId.value,
-        versionId: simulationForm.versionId || activeVersionId.value,
-        snapshotMode: simulationForm.versionId || activeVersionId.value ? "ACTIVE" : "DRAFT",
-        feeIds: selectedFeeId.value ? [selectedFeeId.value] : [],
-        billMonth: simulationForm.billMonth,
-        inputJson: JSON.stringify(parsed),
-        includeExplain: simulationForm.includeExplain,
-      });
-      ElMessage.success("同步计费完成，调用日志已留存");
-    } else if (mode === "simulation") {
-      simulationResult.value = await api().executeSimulation({
-        sceneId: selectedSceneId.value,
-        versionId: simulationForm.versionId || activeVersionId.value,
-        billMonth: simulationForm.billMonth,
-        inputJson: JSON.stringify(parsed),
-      });
-      ElMessage.success("试算完成");
-    } else {
-      if (!simulationForm.billMonth) throw new Error("正式任务必须选择账期");
-      const taskPayload = {
-        sceneId: selectedSceneId.value,
-        versionId: simulationForm.versionId || activeVersionId.value,
-        taskType: Array.isArray(parsed) ? "FORMAL_BATCH" : "FORMAL_SINGLE",
-        billMonth: simulationForm.billMonth,
-        requestNo: `COST-LITE-${Date.now()}`,
-        inputSourceType: "INLINE_JSON",
-        inputJson: JSON.stringify(parsed),
-        remark: "Cost Lite 工作台提交",
-      };
-      if (api().precheckTask) {
-        const precheck = await api().precheckTask!(taskPayload);
-        if (precheck.passed === false) {
-          openJsonDetail("正式任务检查", precheck);
-          ElMessage.warning(precheck.message || "正式任务检查存在阻断项");
-          return;
-        }
-      }
-      simulationResult.value = await api().submitTask(taskPayload);
-      ElMessage.success("正式任务已提交");
-    }
-    await Promise.all([loadBillingLogs(), loadResults()]);
+    simulationResult.value = await api().executeSimulation({
+      sceneId: selectedSceneId.value,
+      versionId: simulationForm.versionId || activeVersionId.value,
+      feeId: trialFeeId.value || undefined,
+      billMonth: simulationForm.billMonth,
+      inputJson: JSON.stringify(parsed),
+      includeExplain: simulationForm.includeExplain,
+    });
+    ElMessage.success("试算完成，试算日志和结果已留存");
+    await loadBillingLogs();
   } catch (error) {
     ElMessage.error(errorMessage(error, "计费执行失败"));
   } finally {
@@ -1353,70 +1690,22 @@ async function loadBillingLogs(): Promise<void> {
     billingLogs.value = page.rows;
     billingLogTotal.value = page.total;
   } catch (error) {
-    ElMessage.error(errorMessage(error, "调用日志加载失败"));
+    ElMessage.error(errorMessage(error, "试算日志加载失败"));
   } finally {
     loading.logs = false;
   }
 }
 
-const resultQuery = reactive({
-  pageNum: 1,
-  pageSize: 20,
-  billMonth: simulationForm.billMonth,
-});
-const results = ref<CostLiteRecord[]>([]);
-const resultTotal = ref(0);
-
-async function loadResults(): Promise<void> {
-  loading.results = true;
-  try {
-    const billMonth = resultQuery.billMonth || simulationForm.billMonth;
-    if (!billMonth) {
-      results.value = [];
-      resultTotal.value = 0;
-      return;
-    }
-    resultQuery.billMonth = billMonth;
-    const page = await api().listResults({
-      ...resultQuery,
-      sceneId: selectedSceneId.value,
-      billMonth,
-    });
-    results.value = page.rows;
-    resultTotal.value = page.total;
-  } catch (error) {
-    ElMessage.error(errorMessage(error, "正式结果加载失败"));
-  } finally {
-    loading.results = false;
-  }
-}
-
 watch(bottomTab, (tab) => {
   if (tab === "logs") void loadBillingLogs();
-  if (tab === "results") void loadResults();
 });
 
 async function showBillingLog(row: CostLiteRecord): Promise<void> {
   loading.detail = true;
   try {
-    openJsonDetail("调用日志", await api().getBillingLog(row.simulationId));
+    openJsonDetail("试算日志和结果", await api().getBillingLog(row.simulationId));
   } catch (error) {
-    ElMessage.error(errorMessage(error, "调用日志详情加载失败"));
-  } finally {
-    loading.detail = false;
-  }
-}
-
-async function showResult(row: CostLiteRecord): Promise<void> {
-  loading.detail = true;
-  try {
-    const detail = await api().getResult(row.resultId);
-    if (detail.traceId) {
-      detail.trace = await api().getTrace(detail.traceId);
-    }
-    openJsonDetail("计费结果", detail);
-  } catch (error) {
-    ElMessage.error(errorMessage(error, "计费结果详情加载失败"));
+    ElMessage.error(errorMessage(error, "试算日志详情加载失败"));
   } finally {
     loading.detail = false;
   }
@@ -1442,6 +1731,9 @@ onMounted(initialize);
         </div>
         <div class="header-actions">
           <el-button :icon="Refresh" circle title="刷新" @click="initialize" />
+          <el-button :icon="Link" :disabled="!selectedSceneId" @click="openIntegrationExample">
+            接口示例
+          </el-button>
           <el-button :icon="DocumentChecked" :disabled="!selectedSceneId" @click="runPublishPrecheck">
             发布检查
           </el-button>
@@ -1538,6 +1830,9 @@ onMounted(initialize);
             <el-tab-pane name="variables">
               <template #label><Link class="tab-icon" />要素</template>
             </el-tab-pane>
+            <el-tab-pane name="formulas">
+              <template #label><DocumentChecked class="tab-icon" />公式</template>
+            </el-tab-pane>
           </el-tabs>
           <div class="panel-actions">
             <el-button
@@ -1552,9 +1847,9 @@ onMounted(initialize);
               type="primary"
               :icon="Plus"
               circle
-              :title="centerTab === 'fees' ? '新增费目' : '新增要素'"
+              :title="centerTab === 'fees' ? '新增费目' : centerTab === 'variables' ? '新增要素' : '新增公式'"
               :disabled="!selectedSceneId"
-              @click="centerTab === 'fees' ? openFeeDialog() : openVariableDialog()"
+              @click="centerTab === 'fees' ? openFeeDialog() : centerTab === 'variables' ? openVariableDialog() : openFormulaDialog()"
             />
           </div>
         </div>
@@ -1587,7 +1882,7 @@ onMounted(initialize);
           <el-empty v-if="!fees.length" description="当前场景暂无费目" :image-size="64" />
         </div>
 
-        <div v-else class="variable-table-wrap">
+        <div v-else-if="centerTab === 'variables'" class="variable-table-wrap">
           <el-table :data="variables" height="100%" size="small" border>
             <el-table-column prop="variableName" label="要素" min-width="150">
               <template #default="{ row }">
@@ -1620,6 +1915,46 @@ onMounted(initialize);
               </template>
             </el-table-column>
           </el-table>
+        </div>
+
+        <div v-else class="formula-list">
+          <div class="formula-summary">
+            <div><span>公式</span><strong>{{ formulaStats.formulaCount }}</strong></div>
+            <div><span>启用</span><strong>{{ formulaStats.enabledFormulaCount }}</strong></div>
+            <div><span>要素引用</span><strong>{{ formulaStats.variableRefCount }}</strong></div>
+            <div><span>规则引用</span><strong>{{ formulaStats.ruleRefCount }}</strong></div>
+          </div>
+          <div class="panel-filter formula-filter">
+            <el-input v-model="formulaKeyword" :prefix-icon="Search" clearable placeholder="搜索公式编码、名称或表达式" />
+          </div>
+          <div v-if="!formulaManagementSupported" class="formula-support-tip">
+            当前适配器只支持公式选择，未提供公式维护接口，请升级 Starter 或 CostLiteApi。
+          </div>
+          <article v-for="formula in filteredFormulas" :key="formula.formulaId" class="formula-row">
+            <div class="formula-row-main">
+              <div class="formula-heading">
+                <strong>{{ formula.formulaName || formula.formulaCode }}</strong>
+                <el-tag size="small" effect="plain">{{ formulaReturnTypeText(formula.returnType) }}</el-tag>
+                <el-tag :type="statusTagType('cost_formula_status', formula.status)" size="small">
+                  {{ dictLabel('cost_formula_status', formula.status) }}
+                </el-tag>
+              </div>
+              <div class="formula-meta">
+                <span>{{ formula.formulaCode }}</span>
+                <span>V{{ formula.currentVersionNo || 1 }}</span>
+                <span>{{ formulaReferenceSummary(formula) }}</span>
+              </div>
+              <p class="formula-business">{{ formula.businessFormula || '未填写中文业务口径' }}</p>
+              <p class="formula-expression">{{ formula.formulaExpr }}</p>
+            </div>
+            <div class="formula-row-actions" @click.stop>
+              <el-button link :icon="VideoPlay" title="试算公式" @click="openFormulaDialog(formula)" />
+              <el-button link :icon="Refresh" title="查看版本" @click="openFormulaVersions(formula)" />
+              <el-button link :icon="Edit" title="编辑公式" @click="openFormulaDialog(formula)" />
+              <el-button link type="danger" :icon="Delete" title="删除公式" @click="deleteFormula(formula)" />
+            </div>
+          </article>
+          <el-empty v-if="!filteredFormulas.length" description="当前场景暂无公式，点击右上角加号新增" :image-size="64" />
         </div>
       </section>
 
@@ -1673,7 +2008,7 @@ onMounted(initialize);
     <section class="runtime-band">
       <el-tabs v-model="bottomTab" class="runtime-tabs">
         <el-tab-pane name="simulation">
-          <template #label><VideoPlay class="tab-icon" />联调试算</template>
+          <template #label><VideoPlay class="tab-icon" />试算验证</template>
           <div class="simulation-layout">
             <div class="simulation-form">
               <div class="simulation-toolbar">
@@ -1692,6 +2027,14 @@ onMounted(initialize);
                   format="YYYY-MM"
                   placeholder="账期"
                 />
+                <el-select v-model="trialFeeId" clearable placeholder="试算范围：场景全部费目">
+                  <el-option
+                    v-for="fee in fees"
+                    :key="fee.feeId"
+                    :label="`${fee.feeName} · ${fee.feeCode}`"
+                    :value="fee.feeId"
+                  />
+                </el-select>
                 <el-checkbox v-model="simulationForm.includeExplain">返回解释</el-checkbox>
                 <el-button :loading="loading.template" @click="fillInputTemplate">生成模板</el-button>
               </div>
@@ -1701,13 +2044,10 @@ onMounted(initialize);
                 :autosize="{ minRows: 8, maxRows: 16 }"
                 spellcheck="false"
               />
+              <div class="simulation-scope-note">当前试算：{{ trialScopeLabel() }}；输入区请替换为业务系统真实请求数据。</div>
               <div class="simulation-actions">
-                <el-button type="primary" :icon="VideoPlay" :loading="loading.running" @click="runCalculate('calculate')">
-                  同步计费
-                </el-button>
-                <el-button :icon="Check" :loading="loading.running" @click="runCalculate('simulation')">保存试算</el-button>
-                <el-button type="success" :icon="Promotion" :loading="loading.running" @click="runCalculate('task')">
-                  提交正式任务
+                <el-button type="primary" :icon="VideoPlay" :loading="loading.running" @click="runSimulation">
+                  执行试算
                 </el-button>
               </div>
             </div>
@@ -1722,7 +2062,7 @@ onMounted(initialize);
         </el-tab-pane>
 
         <el-tab-pane name="logs">
-          <template #label><DocumentChecked class="tab-icon" />调用日志</template>
+          <template #label><DocumentChecked class="tab-icon" />试算日志</template>
           <div class="runtime-table-toolbar">
             <el-select v-model="logQuery.status" clearable placeholder="全部状态" style="width: 140px" @change="logQuery.pageNum = 1; loadBillingLogs()">
               <el-option v-for="item in dictOptions('cost_simulation_status')" :key="item.value" :label="item.label" :value="item.value" />
@@ -1746,7 +2086,7 @@ onMounted(initialize);
               <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
             </el-table-column>
             <el-table-column label="操作" width="72" fixed="right">
-              <template #default="{ row }"><el-button link :icon="View" title="查看调用日志详情" @click="showBillingLog(row)" /></template>
+              <template #default="{ row }"><el-button link :icon="View" title="查看试算日志和结果" @click="showBillingLog(row)" /></template>
             </el-table-column>
           </el-table>
           <el-pagination
@@ -1759,47 +2099,6 @@ onMounted(initialize);
           />
         </el-tab-pane>
 
-        <el-tab-pane name="results">
-          <template #label><Coin class="tab-icon" />正式结果</template>
-          <div class="runtime-table-toolbar">
-            <span>正式任务写入结果台账与追溯；同步试算保存在调用日志。</span>
-            <el-date-picker
-              v-model="resultQuery.billMonth"
-              type="month"
-              value-format="YYYY-MM"
-              format="YYYY-MM"
-              :clearable="false"
-              placeholder="账期"
-              style="width: 140px"
-              @change="resultQuery.pageNum = 1; loadResults()"
-            />
-            <el-button :icon="Refresh" @click="loadResults">刷新</el-button>
-          </div>
-          <el-table :data="results" v-loading="loading.results" size="small" border height="300">
-            <el-table-column prop="resultId" label="结果ID" width="90" />
-            <el-table-column prop="taskNo" label="任务号" min-width="150" />
-            <el-table-column prop="bizNo" label="业务号" min-width="130" />
-            <el-table-column prop="feeName" label="费目" min-width="140" />
-            <el-table-column label="金额" width="120" align="right">
-              <template #default="{ row }">{{ row.amountValue ?? row.amount ?? '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="billMonth" label="账期" width="90" />
-            <el-table-column prop="createTime" label="时间" width="170">
-              <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="72" fixed="right">
-              <template #default="{ row }"><el-button link :icon="View" title="查看计费结果详情" @click="showResult(row)" /></template>
-            </el-table-column>
-          </el-table>
-          <el-pagination
-            v-model:current-page="resultQuery.pageNum"
-            v-model:page-size="resultQuery.pageSize"
-            :total="resultTotal"
-            layout="total, prev, pager, next"
-            @current-change="loadResults"
-            @size-change="resultQuery.pageNum = 1; loadResults()"
-          />
-        </el-tab-pane>
       </el-tabs>
     </section>
 
@@ -2091,6 +2390,136 @@ onMounted(initialize);
       <template #footer><el-button :icon="View" @click="previewRule">预览</el-button><el-button @click="ruleDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" @click="saveRule">保存</el-button></template>
     </el-dialog>
 
+    <el-dialog
+      v-model="formulaDialogVisible"
+      :title="formulaForm.formulaId ? '编辑公式' : '新增公式'"
+      width="920px"
+      destroy-on-close
+    >
+      <el-alert
+        title="公式是可复用、可测试、可回退的独立资产"
+        type="info"
+        :closable="false"
+        show-icon
+      >
+        <template #default>规则负责适用条件，公式负责金额或指标表达式；保存后才会进入发布版本。</template>
+      </el-alert>
+      <el-form ref="formulaFormRef" :model="formulaForm" :rules="formulaRules" label-width="104px" class="formula-editor-form">
+        <div class="dialog-grid">
+          <el-form-item label="所属场景"><el-input :model-value="selectedScene?.sceneName" disabled /></el-form-item>
+          <el-form-item label="公式编码" prop="formulaCode"><el-input v-model="formulaForm.formulaCode" maxlength="64" /></el-form-item>
+          <el-form-item label="公式名称" prop="formulaName"><el-input v-model="formulaForm.formulaName" maxlength="128" /></el-form-item>
+          <el-form-item label="返回类型" prop="returnType">
+            <el-select v-model="formulaForm.returnType" filterable>
+              <el-option
+                v-for="item in dictOptions('cost_formula_return_type')"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="状态" prop="status">
+            <el-select v-model="formulaForm.status">
+              <el-option
+                v-for="item in dictOptions('cost_formula_status')"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="命名空间">
+            <el-input v-model="formulaForm.namespaceScope" placeholder="例如 V,C,I,F,T" />
+          </el-form-item>
+          <el-form-item label="排序"><el-input-number v-model="formulaForm.sortNo" :min="0" :max="999999" /></el-form-item>
+          <el-form-item label="中文业务公式" class="span-2">
+            <el-input
+              v-model="formulaForm.businessFormula"
+              type="textarea"
+              :rows="3"
+              maxlength="1000"
+              show-word-limit
+              placeholder="例如：数量 × 单价，或填写业务人员能读懂的计算口径"
+            />
+          </el-form-item>
+          <el-form-item label="标准执行表达式" prop="formulaExpr" class="span-2">
+            <el-input
+              v-model="formulaForm.formulaExpr"
+              type="textarea"
+              :rows="4"
+              maxlength="2000"
+              show-word-limit
+              spellcheck="false"
+              placeholder="例如：I.quantity * 2.5"
+            />
+          </el-form-item>
+          <el-form-item label="公式说明" class="span-2">
+            <el-input v-model="formulaForm.formulaDesc" type="textarea" :rows="2" maxlength="500" show-word-limit />
+          </el-form-item>
+          <el-form-item label="备注" class="span-2"><el-input v-model="formulaForm.remark" type="textarea" :rows="2" maxlength="500" /></el-form-item>
+        </div>
+      </el-form>
+
+      <div class="editor-section formula-test-section">
+        <div class="editor-section-header">
+          <div>
+            <strong>公式试算</strong>
+            <span class="condition-group-note">输入 JSON 会作为 I（调用输入）命名空间；需要测试 V/C/F/T 时可直接传对应对象。</span>
+          </div>
+          <el-button type="primary" :icon="VideoPlay" :loading="loading.formulaTesting" @click="testFormula">
+            试算当前内容
+          </el-button>
+        </div>
+        <el-input v-model="formulaTestInputJson" type="textarea" :rows="5" spellcheck="false" placeholder='例如：{"quantity":8}' />
+        <div v-if="Object.keys(formulaTestResult).length" class="formula-test-result">
+          <div class="formula-test-result-header">
+            <strong>试算结果</strong>
+            <el-tag type="success" size="small">通过</el-tag>
+          </div>
+          <pre>{{ JSON.stringify(formulaTestResult, null, 2) }}</pre>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="formulaDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loading.saving" @click="saveFormula">保存公式</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="formulaVersionDialogVisible"
+      title="公式版本台账"
+      width="900px"
+      destroy-on-close
+    >
+      <div class="formula-version-head">
+        <div>
+          <strong>{{ formulaVersionFormula.formulaName || formulaVersionFormula.formulaCode }}</strong>
+          <span>{{ formulaVersionFormula.formulaCode }}</span>
+        </div>
+        <span class="condition-group-note">回退会生成新的当前版本，不会删除历史版本。</span>
+      </div>
+      <el-table :data="formulaVersions" v-loading="loading.formulaVersions" size="small" border max-height="420">
+        <el-table-column label="版本" width="80" align="center">
+          <template #default="{ row }">V{{ row.versionNo || row.versionId }}</template>
+        </el-table-column>
+        <el-table-column prop="changeType" label="变更" width="100" />
+        <el-table-column prop="businessFormula" label="中文业务公式" min-width="240" show-overflow-tooltip />
+        <el-table-column prop="formulaExpr" label="标准表达式" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="createBy" label="保存人" width="100" />
+        <el-table-column prop="createTime" label="保存时间" width="160">
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" :icon="View" title="查看版本详情" @click="showFormulaVersion(row)" />
+            <el-button link type="warning" :icon="Refresh" title="回退为当前版" @click="rollbackFormulaVersion(row)" />
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!formulaVersions.length && !loading.formulaVersions" description="暂无公式版本" :image-size="64" />
+    </el-dialog>
+
     <el-dialog v-model="publishDialogVisible" title="发布版本" width="560px">
       <el-form ref="publishFormRef" :model="publishForm" :rules="publishRules" label-width="96px">
         <el-form-item label="场景"><el-input :model-value="selectedScene?.sceneName" disabled /></el-form-item>
@@ -2098,6 +2527,59 @@ onMounted(initialize);
         <el-form-item label="立即生效"><el-switch v-model="publishForm.activateNow" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="publishDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.publishing" @click="publishVersion">确认发布</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="integrationDialogVisible" title="业务系统调用示例" width="1000px" destroy-on-close>
+      <div class="integration-context">
+        <div>
+          <span>场景</span>
+          <strong>{{ integrationExample.sceneName }}</strong>
+          <small>{{ integrationExample.sceneCode }}</small>
+        </div>
+        <el-radio-group v-model="integrationExampleScope" size="small">
+          <el-radio-button label="scene">场景全部费目</el-radio-button>
+          <el-radio-button label="fee" :disabled="!selectedFeeId">当前选中费目</el-radio-button>
+        </el-radio-group>
+      </div>
+      <el-alert
+        title="开放接口只允许业务系统后端调用"
+        type="info"
+        :closable="false"
+        show-icon
+      >
+        <template #default>当前示例：{{ integrationExample.feeName }}（{{ integrationExample.feeCode }}）。生产请求固定使用生效版本，令牌和数据库账号不要下发到浏览器。</template>
+      </el-alert>
+      <el-tabs v-model="integrationExampleTab" class="integration-tabs">
+        <el-tab-pane label="请求 JSON" name="request">
+          <div class="integration-code-toolbar">
+            <span>POST 请求体</span>
+            <el-button link :icon="CopyDocument" title="复制请求 JSON" @click="copyText(integrationExample.requestJson)" />
+          </div>
+          <pre class="integration-code">{{ integrationExample.requestJson }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="Starter 代理调用" name="starter">
+          <div class="integration-code-toolbar">
+            <span>/cost-lite/open/calculate</span>
+            <el-button link :icon="CopyDocument" title="复制 Starter 调用示例" @click="copyText(integrationExample.starterCurl)" />
+          </div>
+          <pre class="integration-code">{{ integrationExample.starterCurl }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="独立 Jar 调用" name="runtime">
+          <div class="integration-code-toolbar">
+            <span>/cost/open/fee/calculate</span>
+            <el-button link :icon="CopyDocument" title="复制独立 Jar 调用示例" @click="copyText(integrationExample.runtimeCurl)" />
+          </div>
+          <pre class="integration-code">{{ integrationExample.runtimeCurl }}</pre>
+        </el-tab-pane>
+      </el-tabs>
+      <div class="integration-params">
+        <div class="integration-section-title">参数说明</div>
+        <el-table :data="integrationExample.params" size="small" border>
+          <el-table-column prop="name" label="参数" width="150" />
+          <el-table-column prop="required" label="要求" width="110" />
+          <el-table-column prop="description" label="说明" min-width="420" />
+        </el-table>
+      </div>
     </el-dialog>
 
     <el-dialog v-model="detailVisible" :title="detailTitle" width="760px">
@@ -2415,6 +2897,128 @@ onMounted(initialize);
   padding: 10px;
 }
 
+.formula-list {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.formula-summary {
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.formula-summary > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.formula-summary span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.formula-summary strong {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.formula-filter {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.formula-support-tip {
+  margin: 0 12px 8px;
+  padding: 8px 10px;
+  color: #92400e;
+  border: 1px solid #f3d19e;
+  border-radius: 4px;
+  background: #fdf6ec;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.formula-row {
+  min-height: 116px;
+  padding: 11px 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid #e9edf2;
+}
+
+.formula-row:hover {
+  background: #fafcff;
+}
+
+.formula-row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.formula-heading,
+.formula-meta,
+.formula-version-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.formula-heading strong {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formula-meta {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.formula-meta span + span::before {
+  margin-right: 7px;
+  color: #c0c7d1;
+  content: "|";
+}
+
+.formula-business,
+.formula-expression {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.formula-business {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.formula-expression {
+  color: var(--muted);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+}
+
+.formula-row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .fee-context {
   padding: 11px 12px;
   display: grid;
@@ -2516,6 +3120,13 @@ onMounted(initialize);
   justify-content: flex-end;
 }
 
+.simulation-scope-note {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .result-preview {
   min-height: 260px;
   border: 1px solid var(--line);
@@ -2594,6 +3205,62 @@ onMounted(initialize);
   border-top: 1px solid var(--line);
 }
 
+.formula-editor-form {
+  margin-top: 14px;
+}
+
+.formula-test-section {
+  margin-top: 8px;
+}
+
+.formula-test-result {
+  margin-top: 10px;
+  border: 1px solid #b7ebc6;
+  border-radius: 4px;
+  background: #f0fdf4;
+  overflow: hidden;
+}
+
+.formula-test-result-header {
+  min-height: 34px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #b7ebc6;
+}
+
+.formula-test-result pre {
+  margin: 0;
+  max-height: 220px;
+  padding: 10px;
+  overflow: auto;
+  color: #166534;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.formula-version-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.formula-version-head > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.formula-version-head > div span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .editor-section-header {
   margin-bottom: 9px;
   justify-content: space-between;
@@ -2669,6 +3336,69 @@ onMounted(initialize);
   overflow: auto;
 }
 
+.integration-context {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.integration-context > div:first-child {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.integration-context span,
+.integration-context small,
+.integration-code-toolbar span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.integration-context strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-tabs {
+  margin-top: 14px;
+}
+
+.integration-code-toolbar {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.integration-code {
+  min-height: 150px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: #e5eefc;
+  background: #172033;
+  font: 12px/1.65 Consolas, "Courier New", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
+.integration-params {
+  margin-top: 14px;
+}
+
+.integration-section-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
 .cost-lite-workbench :deep(.el-overlay-dialog) {
   overflow: auto;
 }
@@ -2725,6 +3455,24 @@ onMounted(initialize);
 
   .dialog-grid .span-2 {
     grid-column: auto;
+  }
+
+  .integration-context {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .formula-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formula-row {
+    flex-direction: column;
+  }
+
+  .formula-row-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 
   .simulation-actions {
