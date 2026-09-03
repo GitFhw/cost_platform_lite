@@ -2,7 +2,9 @@
 
 ## 1. 组件定位
 
-`Front/src` 是可嵌入的 Vue 3 工作台，只负责计费维护和联调界面，不依赖母体路由、菜单、权限模型、业务实体或请求封装。
+`Front/src` 是 Oracle 和 MySQL 共用的一套 Vue 3 工作台，只负责计费维护和联调界面，不依赖母体路由、菜单、权限模型、业务实体、宿主字典接口或请求封装。工作台启动时通过运行 Jar 的 `/dictionary/options` 读取目标轻量库中的计费字典，因此宿主项目不需要复制字典 JS。
+
+Jar 连接目标库中按 `Mysql/sql/cost-lite-schema.sql` 或 `Oracle/sql/cost-lite-schema.sql` 初始化的同名 `cost_*` 表，字段与母体实体保持一致，并只读取轻量 SQL 同步初始化的 `sys_dict_type`、`sys_dict_data` 两张字典表；不要求目标系统迁移母体源码、其他 `sys_*` 表或无关业务表。前端字典和数据库连接彼此独立。
 
 工作台采用单一简化模式，包含：
 
@@ -16,10 +18,12 @@
 
 当前没有独立公式维护页面。规则可以选择运行端已有公式或填写表达式，公式页面后续可作为独立模块增加。
 
-后端支持两种等价部署入口：
+后端支持两种等价部署入口，前端代码只切换一次路由模式：
 
 - `proxy`：宿主引入 Spring Boot Starter，前端调用稳定的 `/cost-lite/**` 协议。
 - `runtime`：前端直接调用独立 Jar 暴露的母体兼容路径，前端业务组件不变。
+
+Oracle 和 MySQL 的差异只在后端运行 Jar 与初始化 SQL；两套 Jar 都提供相同的工作台接口语义，业务项目不需要为数据库类型复制一套页面。
 
 ## 2. 前置条件
 
@@ -63,6 +67,14 @@ const costLiteApi = createCostLiteApi(
   <CostLiteWorkbench :api="costLiteApi" />
 </template>
 ```
+
+如果目标项目需要调整中文名称或可选值，直接修改目标轻量库中的对应字典数据即可，工作台刷新后自动生效：
+
+```http
+GET /cost/dictionary/options?types=cost_business_domain,cost_scene_status,cost_rule_operator
+```
+
+字典接口只接受 `cost_` 开头的类型，返回值来自当前 Jar 连接的轻量库；第三方系统无需接入宿主字典表。
 
 已有 AG Vue 3 项目的实际包装示例见 `Front/examples/ag-vue3-page.vue`。
 

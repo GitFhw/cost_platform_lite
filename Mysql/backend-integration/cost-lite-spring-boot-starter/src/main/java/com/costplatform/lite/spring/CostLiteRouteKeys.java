@@ -10,6 +10,7 @@ package com.costplatform.lite.spring;
 public final class CostLiteRouteKeys {
     public static final String HEALTH = "health";
     public static final String BOOTSTRAP = "bootstrap";
+    public static final String DICTIONARY_OPTIONS = "dictionary-options";
 
     public static final String SCENE_LIST = "scene-list";
     public static final String SCENE_STATS = "scene-stats";
