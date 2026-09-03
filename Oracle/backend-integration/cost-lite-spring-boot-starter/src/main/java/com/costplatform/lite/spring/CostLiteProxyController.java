@@ -51,6 +51,11 @@ public class CostLiteProxyController {
         return get(CostLiteRouteKeys.BOOTSTRAP, query, CostLiteAuth.MANAGEMENT);
     }
 
+    @GetMapping("/dictionary/options")
+    public Object dictionaryOptions(@RequestParam MultiValueMap<String, String> query) {
+        return get(CostLiteRouteKeys.DICTIONARY_OPTIONS, query, CostLiteAuth.MANAGEMENT);
+    }
+
     @GetMapping("/scenes")
     public Object scenes(@RequestParam MultiValueMap<String, String> query) {
         return get(CostLiteRouteKeys.SCENE_LIST, query, CostLiteAuth.MANAGEMENT);
