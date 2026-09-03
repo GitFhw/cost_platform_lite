@@ -1,5 +1,7 @@
 # Oracle 轻量计费集成教程
 
+接口字段、场景级调用、指定费目调用和 Java/cURL 示例见：[Oracle/API.md](API.md)。
+
 本目录是可直接交付给第三方业务系统的 Oracle 集成包。运行端以独立 Jar 交付，宿主系统可选择通过 HTTP 直连 Jar，或引入 `cost-lite-spring-boot-starter` 暴露同源代理。仓库只保存集成所需的 SQL、配置、脚本、Client、Starter 和运行制品，不包含母体平台源码或第三方项目源码。
 
 ## 1. 交付内容
@@ -90,7 +92,7 @@ FROM user_tables
 WHERE table_name LIKE 'COST\_%' ESCAPE '\\';
 ```
 
-本交付脚本包含母体当前冻结模型的 26 张 `cost_*` 表和相关二级索引。若业务库已有母体表，最终以业务库实际模型和母体版本基线为准。
+本交付脚本包含母体当前冻结模型的 26 张 `cost_*` 表、相关二级索引，以及工作台实际需要的 `sys_dict_type`、`sys_dict_data` 两张字典表。字典只初始化计费页面需要的类型和值，不迁移其他 RuoYi `sys_*` 表、账单表或客户业务表；若业务库已有同名母体字典表，脚本会复用现有表并只补充缺失的计费字典值。
 
 ## 4. 启动 Oracle 运行 Jar
 
@@ -237,7 +239,7 @@ const costLiteApi = createCostLiteApi(
 );
 ```
 
-如果业务网关前缀为 `/business/cost`，只调整 `basePath`，不需要逐个改动场景、费目、要素、规则、版本、日志和结果接口。菜单清单和完整页面说明见 `../Front/menu-manifest.yml` 与 `../Front/README.md`。
+如果业务网关前缀为 `/business/cost`，只调整 `basePath`，不需要逐个改动场景、费目、要素、规则、版本和试算日志接口。菜单清单和完整页面说明见 `../Front/menu-manifest.yml` 与 `../Front/README.md`。
 
 ## 8. 最快一日接通顺序
 
@@ -247,10 +249,10 @@ const costLiteApi = createCostLiteApi(
 2. 新增场景，维护场景编码、名称、业务域和对象维度。
 3. 在场景下新增费目。
 4. 在场景下新增要素，至少配置一个 `INPUT` 来源的数量要素。
-5. 在费目下新增规则，先使用固定费率或固定金额跑通链路，再按需要使用阶梯或公式。
+5. 在“公式”页按场景维护可复用公式，先执行在线试算；在费目下新增规则，先使用固定费率或固定金额跑通链路，再按需要使用阶梯或公式。
 6. 执行发布前检查，创建版本并立即生效。
-7. 通过工作台或接口执行同步计费。
-8. 检查成功或失败日志；正式任务完成后检查结果台账和追溯详情。
+7. 用一条真实业务数据执行试算，检查试算结果预览和试算日志。
+8. 点击工作台“接口示例”，核对场景级、指定费目的请求体及 Starter、独立 Jar 调用写法。
 
 ## 9. 接口验收示例
 
@@ -293,7 +295,26 @@ curl -X POST http://127.0.0.1:18082/cost/publish \
   }'
 ```
 
-### 9.3 同步计费
+### 9.3 试算与同步计费
+
+工作台试算用于验证配置，不创建正式任务，也不写入正式结果台账；它会把真实输入、要素快照、解释、结果和失败原因保存到 `cost_simulation_record`。同步计费是业务系统后端的生产接口，立即返回金额并保存调用日志，不应从浏览器直接调用。
+
+工作台试算接口如下，`feeId`、`feeIds`、`feeCode` 都可选；不传时按场景全部费目试算：
+
+```bash
+curl -X POST http://127.0.0.1:18082/cost/run/simulation/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sceneId": 1,
+    "versionId": 1,
+    "feeId": 1,
+    "billMonth": "2026-09",
+    "inputJson": "{\"bizNo\":\"ORDER-001\",\"objectCode\":\"ORDER-001\",\"quantity\":8}",
+    "includeExplain": true
+  }'
+```
+
+同步计费供业务后端调用：
 
 ```bash
 curl -X POST http://127.0.0.1:18082/cost/run/fee/calculate \
@@ -310,9 +331,27 @@ curl -X POST http://127.0.0.1:18082/cost/run/fee/calculate \
 
 成功响应会返回金额和 `billingLogId`；输入格式、版本或变量不正确时会返回错误，同时尽量保留失败日志编号，便于查询 `/cost/run/simulation/**`。
 
-### 9.4 正式任务与结果
+批量试算走受保护的管理/集成链路，不需要创建 `openApp`：
 
-正式任务使用 `/cost/run/task/submit`，任务详情使用 `/cost/run/task/{taskId}`，结果台账使用：
+```bash
+curl -X POST http://127.0.0.1:18082/cost/run/simulation/batch-execute \
+  -H "Content-Type: application/json" \
+  -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
+  -d '{
+    "sceneId": 1,
+    "versionId": 1,
+    "feeId": 1,
+    "billMonth": "2026-09",
+    "inputJson": "[{\"bizNo\":\"ORDER-001\",\"objectCode\":\"ORDER-001\",\"quantity\":8},{\"bizNo\":\"ORDER-002\",\"objectCode\":\"ORDER-002\",\"quantity\":3}]",
+    "includeExplain": true
+  }'
+```
+
+`inputJson` 必须是非空对象数组，`bizNo` 在同一批次内必须唯一。每条输入都会保存一条 `cost_simulation_record`，成功和失败都保留；响应中的金额读取每条记录的 `result.amountTotal`，费目明细读取 `result.feeResults`；批量试算不会创建正式任务、正式结果台账或结果追溯。
+
+### 9.4 后端正式任务与结果
+
+正式任务不属于开放接口和工作台操作范围，只给业务系统后端或受保护的内部运维接口调用。正式任务使用 `/cost/run/task/submit`，任务详情使用 `/cost/run/task/{taskId}`，结果台账使用：
 
 ```text
 GET /cost/run/result/list
@@ -320,21 +359,105 @@ GET /cost/run/result/{resultId}
 GET /cost/run/trace/{traceId}
 ```
 
-正式任务会保存任务、明细、结果台账和追溯数据；第三方报表可基于结果查询接口或 `cost_result_ledger` 只读开发。
+正式任务会保存任务、明细、结果台账和追溯数据；本工作台不提供这些操作和页面，第三方报表如确有需要再由业务后端或只读服务查询。
+
+### 9.5 场景级业务系统调用
+
+业务项目内嵌集成时，业务后端引入 Starter 并调用稳定的 `/cost-lite/**` 路径；Starter 连接独立 Jar 时使用配置中的 `base-url` 和 `admin-token`，业务代码不接触数据库账号，也不需要创建 `openApp`。独立 Jar 部署则直接调用 `/cost/**` 管理路径。建议缓存“场景 -> 生效版本 -> 费目”的解析结果，交易时只传稳定的 `sceneId`、`versionId`、`feeId` 和输入数据。
+
+| 能力 | Starter 代理 | 独立 Jar |
+| --- | --- | --- |
+| 查询场景 | `GET /cost-lite/scenes` | `GET /cost/scene/list` |
+| 查询场景版本 | `GET /cost-lite/scenes/{sceneId}/versions` | `GET /cost/run/version-options/{sceneId}` |
+| 查询场景费目 | `GET /cost-lite/fees?sceneId={sceneId}` | `GET /cost/fee/list?sceneId={sceneId}` |
+| 场景级同步计费 | `POST /cost-lite/calculate` | `POST /cost/run/fee/calculate` |
+| 批量试算 | `POST /cost-lite/simulations/batch` | `POST /cost/run/simulation/batch-execute` |
+
+如确实需要把计费服务作为跨系统开放 API，再启用下面的开放应用令牌模式；它是可选兼容能力，不是内嵌 Starter 集成的前置条件：
+
+开放接口只提供场景、版本、费目、模板和同步计费，不提供试算日志、正式任务或正式结果管理查询，也没有正式任务提交的开放接口。
+
+```json
+{
+  "appCode": "ERP_ORDER_COST",
+  "appName": "ERP 订单计费",
+  "sceneScopeType": "LIST",
+  "sceneIds": [1],
+  "allowDraftSnapshot": false,
+  "tokenTtlSeconds": 7200,
+  "status": "0"
+}
+```
+
+独立 Jar 的开放调用路径：
+
+```bash
+# 换取短期 accessToken
+curl -X POST http://127.0.0.1:18082/cost/open/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"appCode":"ERP_ORDER_COST","appSecret":"创建开放应用时保存的密钥"}'
+
+# 查询授权场景、版本和费目
+curl -H "X-Cost-Open-Token: $TOKEN" http://127.0.0.1:18082/cost/open/scenes
+curl -H "X-Cost-Open-Token: $TOKEN" http://127.0.0.1:18082/cost/open/scenes/1/versions
+curl -H "X-Cost-Open-Token: $TOKEN" \
+  "http://127.0.0.1:18082/cost/open/scenes/1/fees?versionId=1&snapshotMode=ACTIVE"
+```
+
+Starter 代理下将上面的路径分别替换为 `/cost-lite/open/token`、`/cost-lite/open/scenes`、`/cost-lite/open/scenes/{sceneId}/versions` 和 `/cost-lite/open/scenes/{sceneId}/fees`。令牌也支持 `Authorization: Bearer $TOKEN`；生产业务调用固定使用 `ACTIVE` 正式版本。
+
+### 9.6 指定费目的计算
+
+推荐业务系统缓存“场景 -> 生效版本 -> 费目”的解析结果，交易时传入明确的 `feeId`。需要计算一个场景的全部费目时可以省略 `feeId`，也可以传 `feeIds` 或 `feeCode`。
+
+```bash
+# 先获取指定费目的输入模板（内嵌集成）
+curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
+  "http://127.0.0.1:18082/cost/run/input-template/fee?sceneId=1&versionId=1&feeId=1"
+
+# 再计算指定费目
+curl -X POST http://127.0.0.1:18082/cost/run/fee/calculate \
+  -H "Content-Type: application/json" \
+  -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
+  -d '{
+    "sceneId": 1,
+    "versionId": 1,
+    "feeId": 1,
+    "billMonth": "2026-09",
+    "inputJson": "{\"bizNo\":\"ORDER-001\",\"objectCode\":\"ORDER-001\",\"quantity\":8}",
+    "includeExplain": false
+  }'
+```
+
+上面的路径是内嵌集成管理路径；如启用上一节的 OpenApp 模式，再改用对应的 `/cost/open/**` 路径。返回值包含计费结果和 `billingLogId`；业务系统应保存自己的业务号与该日志编号。错误输入、版本失效或变量缺失也会保存失败日志，平台侧可以据此定位。
+
+### 9.7 试算日志查询
+
+工作台的“试算日志”页查询 `cost_simulation_record`，日志详情同时返回试算输入、要素、解释和试算结果。管理查询使用管理 Token：
+
+```text
+GET /cost/lite/billing-log/list?sceneId=1&pageNum=1&pageSize=20
+GET /cost/lite/billing-log/{simulationId}
+```
+
+Starter 代理对应为 `/cost-lite/logs` 和 `/cost-lite/logs/{simulationId}`。开放令牌不开放管理查询，避免把管理能力下发到浏览器；正式结果查询只属于后端扩展，不属于本工作台。
 
 ## 10. 公式与可插拔扩展
 
-- 母体公式实体和公式接口保留，规则可选择已有公式或填写 `amountFormula`。
-- 当前精简工作台优先支持手写表达式和固定/阶梯费率，独立公式维护页可以作为前端可插拔模块后续加入。
+- 母体公式实体和公式接口保留。当前工作台在同一页面提供公式维护、中文业务口径、标准表达式、在线试算、版本查看和回退。
+- 公式是场景下独立、可复用、可治理的资产；规则负责适用条件和命中，`ruleType=FORMULA` 时必须引用有效的 `amountFormulaCode`。简单场景也可以在规则中直接填写手写表达式。
+- 当前不启用“公式费目无规则”。母体执行链按费目下的规则构造，没有规则的费目会被跳过；发布校验、依赖分析、治理和结果追溯也都是规则边界。让公式费目绕过规则会造成可保存但不可执行，不符合企业级设计。
+- 如果后续确认需要免规则公式费目，应另做母体核心升级，增加明确的费目计价来源/公式绑定语义，并同步改造快照、依赖、执行、治理和追溯，不用 `ruleType=FORMULA` 偷换概念。
 - 定制化新增能力放在插件目录，通过 `COST_LITE_PLUGIN_ENABLED` 和 `COST_LITE_PLUGIN_DIR` 控制；不用的插件可以不部署或关闭。
-- 字典差异通过宿主 YAML 映射或 `CostDictionaryProvider` 扩展适配，数据库仍保存母体统一编码。
+- 字典差异优先直接维护当前轻量库的 `sys_dict_type`、`sys_dict_data`；数据库仍保存母体统一编码。只有明确复用宿主字典且不迁移字典表时，才使用宿主 YAML 映射或 `CostDictionaryProvider` 扩展。
 
 ## 11. 日志、结果与数据边界
 
-- 同步计费成功和失败都写入母体 `cost_simulation_record`。
+- 试算和同步计费成功、失败都写入母体 `cost_simulation_record`；试算结果保存在其中的 `result_json`，供工作台日志详情查看。
 - 正式任务写入 `cost_calc_task`、任务明细、分片和输入批次相关表。
 - 正式计费数据写入 `cost_result_ledger`。
 - 规则命中、变量、条件和定价过程写入 `cost_result_trace`。
+- 正式任务和正式结果表是运行端保留的后端扩展能力，不在开放令牌和本工作台范围内。
 - 计费日志和结果数据不会因为前端页面关闭而丢失；报表由第三方按需自定义，不修改核心计费表结构。
 
 ## 12. 常见问题
