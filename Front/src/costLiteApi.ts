@@ -75,6 +75,15 @@ export interface CostLiteApi {
   previewRuleConflict(data: CostLiteRecord): Promise<CostLiteRecord[]>;
 
   listFormulaOptions(sceneId: number | string): Promise<CostLiteRecord[]>;
+  getFormula?(formulaId: number | string): Promise<CostLiteRecord>;
+  getFormulaGovernance?(formulaId: number | string): Promise<CostLiteRecord>;
+  createFormula?(data: CostLiteRecord): Promise<unknown>;
+  updateFormula?(data: CostLiteRecord): Promise<unknown>;
+  deleteFormulas?(formulaIds: Array<number | string>): Promise<unknown>;
+  listFormulaVersions?(formulaId: number | string): Promise<CostLiteRecord[]>;
+  getFormulaVersion?(versionId: number | string): Promise<CostLiteRecord>;
+  rollbackFormulaVersion?(versionId: number | string): Promise<unknown>;
+  testFormula?(data: CostLiteRecord): Promise<CostLiteRecord>;
   listVersions(sceneId: number | string, params?: CostLiteRecord): Promise<CostLitePage>;
   precheckVersion(sceneId: number | string): Promise<CostLiteRecord>;
   getVersion?(versionId: number | string, params?: CostLiteRecord): Promise<CostLiteRecord>;
@@ -288,6 +297,32 @@ export function createCostLiteApi(
       route("/formulas/options", "/formula/optionselect"),
       { sceneId },
     ),
+    getFormula: (formulaId) => getRecord(route(`/formulas/${formulaId}`, `/formula/${formulaId}`)),
+    getFormulaGovernance: (formulaId) => getRecord(
+      route(`/formulas/${formulaId}/governance`, `/formula/governance/${formulaId}`),
+    ),
+    createFormula: (data) => send("POST", route("/formulas", "/formula"), data),
+    updateFormula: (data) => send("PUT", route("/formulas", "/formula"), data),
+    deleteFormulas: (formulaIds) => send(
+      "DELETE",
+      route(`/formulas/${formulaIds.join(",")}`, `/formula/${formulaIds.join(",")}`),
+    ),
+    listFormulaVersions: (formulaId) => getArray(
+      route(`/formulas/${formulaId}/versions`, `/formula/versions/${formulaId}`),
+    ),
+    getFormulaVersion: (versionId) => getRecord(
+      route(`/formula-versions/${versionId}`, `/formula/version/${versionId}`),
+    ),
+    rollbackFormulaVersion: (versionId) => send(
+      "PUT",
+      route(`/formula-versions/${versionId}/rollback`, `/formula/version/rollback/${versionId}`),
+    ),
+    testFormula: async (data) => recordOf(await request(
+      "POST",
+      route("/formulas/test", "/formula/test"),
+      undefined,
+      data,
+    )),
     listVersions: (sceneId, params) => getPage(
       route("/versions", "/publish/list"),
       { ...params, sceneId },
