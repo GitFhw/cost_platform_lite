@@ -31,6 +31,9 @@ $env:COST_LITE_DB_URL = "jdbc:mysql://$($env:COST_LITE_DB_HOST):$($env:COST_LITE
 
 $java = (Get-Command java -ErrorAction Stop).Source
 $resolvedJar = (Resolve-Path -LiteralPath $JarPath).Path
+if ([string]::IsNullOrWhiteSpace($env:COST_LITE_LOG_PATH)) {
+    $env:COST_LITE_LOG_PATH = Join-Path (Split-Path -Parent $resolvedJar) "logs"
+}
 Write-Output "Starting Cost Lite on port $serverPort with MySQL database $($env:COST_LITE_DB_NAME)..."
 & $java -jar $resolvedJar
 exit $LASTEXITCODE

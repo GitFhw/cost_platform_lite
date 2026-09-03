@@ -2,6 +2,13 @@ import type { InjectionKey } from "vue";
 
 export type CostLiteRecord = Record<string, any>;
 
+export interface CostLiteDictionaryOption {
+  label: string;
+  value: string;
+}
+
+export type CostLiteDictionary = Record<string, CostLiteDictionaryOption[]>;
+
 export interface CostLitePage<T extends CostLiteRecord = CostLiteRecord> {
   rows: T[];
   total: number;
@@ -26,10 +33,13 @@ export interface CostLiteApiOptions {
 export interface CostLiteApi {
   health(): Promise<CostLiteRecord>;
   bootstrap(): Promise<CostLiteRecord>;
+  listDictionaries(dictTypes: string[]): Promise<CostLiteDictionary>;
 
   listScenes(params?: CostLiteRecord): Promise<CostLitePage>;
   getScene(sceneId: number | string): Promise<CostLiteRecord>;
+  getSceneGovernance?(sceneId: number | string): Promise<CostLiteRecord>;
   createScene(data: CostLiteRecord): Promise<unknown>;
+  copyScene?(data: CostLiteRecord): Promise<CostLiteRecord>;
   updateScene(data: CostLiteRecord): Promise<unknown>;
   deleteScenes(sceneIds: Array<number | string>): Promise<unknown>;
 
@@ -38,11 +48,14 @@ export interface CostLiteApi {
   getFeeGovernance(feeId: number | string): Promise<CostLiteRecord>;
   createFee(data: CostLiteRecord): Promise<unknown>;
   updateFee(data: CostLiteRecord): Promise<unknown>;
+  disableFees?(feeIds: Array<number | string>): Promise<unknown>;
   deleteFees(feeIds: Array<number | string>): Promise<unknown>;
 
   listVariables(sceneId: number | string, params?: CostLiteRecord): Promise<CostLitePage>;
   getVariable(variableId: number | string): Promise<CostLiteRecord>;
+  getVariableGovernance?(variableId: number | string): Promise<CostLiteRecord>;
   createVariable(data: CostLiteRecord): Promise<unknown>;
+  copyVariable?(data: CostLiteRecord): Promise<CostLiteRecord>;
   updateVariable(data: CostLiteRecord): Promise<unknown>;
   deleteVariables(variableIds: Array<number | string>): Promise<unknown>;
 
@@ -53,7 +66,9 @@ export interface CostLiteApi {
 
   listRules(sceneId: number | string, feeId: number | string, params?: CostLiteRecord): Promise<CostLitePage>;
   getRule(ruleId: number | string): Promise<CostLiteRecord>;
+  getRuleGovernance?(ruleId: number | string): Promise<CostLiteRecord>;
   createRule(data: CostLiteRecord): Promise<unknown>;
+  copyRule?(data: CostLiteRecord): Promise<unknown>;
   updateRule(data: CostLiteRecord): Promise<unknown>;
   deleteRules(ruleIds: Array<number | string>): Promise<unknown>;
   previewRule(data: CostLiteRecord): Promise<CostLiteRecord>;
@@ -62,12 +77,16 @@ export interface CostLiteApi {
   listFormulaOptions(sceneId: number | string): Promise<CostLiteRecord[]>;
   listVersions(sceneId: number | string, params?: CostLiteRecord): Promise<CostLitePage>;
   precheckVersion(sceneId: number | string): Promise<CostLiteRecord>;
+  getVersion?(versionId: number | string, params?: CostLiteRecord): Promise<CostLiteRecord>;
+  getPublishDiff?(params: CostLiteRecord): Promise<CostLiteRecord>;
   createVersion(data: CostLiteRecord): Promise<CostLiteRecord>;
   activateVersion(versionId: number | string): Promise<unknown>;
+  rollbackVersion?(versionId: number | string): Promise<unknown>;
 
   getInputTemplate(sceneId: number | string, feeIds?: Array<number | string>): Promise<CostLiteRecord>;
   calculate(data: CostLiteRecord): Promise<CostLiteRecord>;
   executeSimulation(data: CostLiteRecord): Promise<CostLiteRecord>;
+  precheckTask?(data: CostLiteRecord): Promise<CostLiteRecord>;
   submitTask(data: CostLiteRecord): Promise<CostLiteRecord>;
 
   listBillingLogs(params?: CostLiteRecord): Promise<CostLitePage>;
@@ -195,10 +214,17 @@ export function createCostLiteApi(
   return {
     health: () => getRecord(route("/health", "/lite/health")),
     bootstrap: () => getRecord(route("/bootstrap", "/lite/bootstrap")),
+    listDictionaries: async (dictTypes) => recordOf(await request(
+      "GET",
+      route("/dictionary/options", "/dictionary/options"),
+      { types: dictTypes.join(",") },
+    )) as CostLiteDictionary,
 
     listScenes: (params) => getPage(route("/scenes", "/scene/list"), params),
     getScene: (sceneId) => getRecord(route(`/scenes/${sceneId}`, `/scene/${sceneId}`)),
+    getSceneGovernance: (sceneId) => getRecord(route(`/scenes/${sceneId}/governance`, `/scene/governance/${sceneId}`)),
     createScene: (data) => send("POST", route("/scenes", "/scene"), data),
+    copyScene: async (data) => recordOf(await request("POST", route("/scenes/copy", "/scene/copy"), undefined, data)),
     updateScene: (data) => send("PUT", route("/scenes", "/scene"), data),
     deleteScenes: (sceneIds) => send("DELETE", route(`/scenes/${sceneIds.join(",")}`, `/scene/${sceneIds.join(",")}`)),
 
@@ -210,6 +236,7 @@ export function createCostLiteApi(
     getFeeGovernance: (feeId) => getRecord(route(`/fees/${feeId}/governance`, `/fee/governance/${feeId}`)),
     createFee: (data) => send("POST", route("/fees", "/fee"), data),
     updateFee: (data) => send("PUT", route("/fees", "/fee"), data),
+    disableFees: (feeIds) => send("PUT", route(`/fees/${feeIds.join(",")}/disable`, `/fee/disable/${feeIds.join(",")}`)),
     deleteFees: (feeIds) => send("DELETE", route(`/fees/${feeIds.join(",")}`, `/fee/${feeIds.join(",")}`)),
 
     listVariables: (sceneId, params) => getPage(
@@ -217,7 +244,9 @@ export function createCostLiteApi(
       routeMode === "runtime" ? { ...params, sceneId } : params,
     ),
     getVariable: (variableId) => getRecord(route(`/variables/${variableId}`, `/variable/${variableId}`)),
+    getVariableGovernance: (variableId) => getRecord(route(`/variables/${variableId}/governance`, `/variable/governance/${variableId}`)),
     createVariable: (data) => send("POST", route("/variables", "/variable"), data),
+    copyVariable: async (data) => recordOf(await request("POST", route("/variables/copy", "/variable/copy"), undefined, data)),
     updateVariable: (data) => send("PUT", route("/variables", "/variable"), data),
     deleteVariables: (variableIds) => send("DELETE", route(`/variables/${variableIds.join(",")}`, `/variable/${variableIds.join(",")}`)),
 
@@ -237,7 +266,9 @@ export function createCostLiteApi(
       { ...params, sceneId, feeId },
     ),
     getRule: (ruleId) => getRecord(route(`/rules/${ruleId}`, `/rule/${ruleId}`)),
+    getRuleGovernance: (ruleId) => getRecord(route(`/rules/${ruleId}/governance`, `/rule/governance/${ruleId}`)),
     createRule: (data) => send("POST", route("/rules", "/rule"), data),
+    copyRule: (data) => send("POST", route("/rules/copy", "/rule/copy"), data),
     updateRule: (data) => send("PUT", route("/rules", "/rule"), data),
     deleteRules: (ruleIds) => send("DELETE", route(`/rules/${ruleIds.join(",")}`, `/rule/${ruleIds.join(",")}`)),
     previewRule: async (data) => recordOf(await request(
@@ -262,6 +293,8 @@ export function createCostLiteApi(
       { ...params, sceneId },
     ),
     precheckVersion: (sceneId) => getRecord(route(`/versions/precheck/${sceneId}`, `/publish/precheck/${sceneId}`)),
+    getVersion: (versionId, params) => getRecord(route(`/versions/${versionId}`, `/publish/${versionId}`), params),
+    getPublishDiff: (params) => getRecord(route("/versions/diff", "/publish/diff"), params),
     createVersion: async (data) => recordOf(await request(
       "POST",
       route("/versions", "/publish"),
@@ -269,6 +302,7 @@ export function createCostLiteApi(
       data,
     )),
     activateVersion: (versionId) => send("PUT", route(`/versions/${versionId}/activate`, `/publish/activate/${versionId}`)),
+    rollbackVersion: (versionId) => send("PUT", route(`/versions/${versionId}/rollback`, `/publish/rollback/${versionId}`)),
 
     getInputTemplate: (sceneId, feeIds) => getRecord(
       route(
@@ -286,6 +320,12 @@ export function createCostLiteApi(
     executeSimulation: async (data) => recordOf(await request(
       "POST",
       route("/simulations", "/run/simulation/execute"),
+      undefined,
+      data,
+    )),
+    precheckTask: async (data) => recordOf(await request(
+      "POST",
+      route("/tasks/precheck", "/run/task/precheck"),
       undefined,
       data,
     )),

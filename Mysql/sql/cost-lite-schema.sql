@@ -762,4 +762,182 @@ create table if not exists cost_open_app (
 
 set foreign_key_checks = 1;
 
+-- =========================================================
+-- Lightweight cost dictionaries only
+-- =========================================================
+-- The two dictionary tables keep the mother platform entity contract.
+-- No other RuoYi sys_* table is required by the lightweight package.
+create table if not exists sys_dict_type
+(
+  dict_id          bigint          not null auto_increment comment '字典主键',
+  dict_name        varchar(100)    default '' comment '字典名称',
+  dict_type        varchar(100)    default '' comment '字典类型',
+  status           char(1)         default '0' comment '状态（0正常 1停用）',
+  create_by        varchar(64)     default '' comment '创建者',
+  create_time      datetime        default current_timestamp comment '创建时间',
+  update_by        varchar(64)     default '' comment '更新者',
+  update_time      datetime        default null comment '更新时间',
+  remark           varchar(500)    default null comment '备注',
+  primary key (dict_id),
+  unique key uk_sys_dict_type_type (dict_type)
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='轻量计费字典类型表';
+
+create table if not exists sys_dict_data
+(
+  dict_code        bigint          not null auto_increment comment '字典编码',
+  dict_sort        int             default 0 comment '字典排序',
+  dict_label       varchar(100)    default '' comment '字典标签',
+  dict_value       varchar(100)    default '' comment '字典键值',
+  dict_type        varchar(100)    default '' comment '字典类型',
+  css_class        varchar(100)    default null comment '样式属性',
+  list_class       varchar(100)    default null comment '表格字典样式',
+  is_default       char(1)         default 'N' comment '是否默认（Y是 N否）',
+  status           char(1)         default '0' comment '状态（0正常 1停用）',
+  create_by        varchar(64)     default '' comment '创建者',
+  create_time      datetime        default current_timestamp comment '创建时间',
+  update_by        varchar(64)     default '' comment '更新者',
+  update_time      datetime        default null comment '更新时间',
+  remark           varchar(500)    default null comment '备注',
+  primary key (dict_code),
+  key idx_sys_dict_data_type (dict_type, dict_sort, status),
+  unique key uk_sys_dict_data_type_value (dict_type, dict_value)
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='轻量计费字典数据表';
+
+insert into sys_dict_type (dict_name, dict_type, status, create_by, create_time, remark)
+select seed.dict_name, seed.dict_type, '0', 'cost-lite', current_timestamp, seed.remark
+from (
+  select '核算-业务域' dict_name, 'cost_business_domain' dict_type, '场景、费目、要素和规则使用的业务域' remark
+  union all select '核算-场景状态', 'cost_scene_status', '场景维护状态'
+  union all select '核算-场景类型', 'cost_scene_type', '场景分类'
+  union all select '核算-费用状态', 'cost_fee_status', '费目维护状态'
+  union all select '核算-计价单位', 'cost_unit_code', '费目计价单位'
+  union all select '核算-要素分组状态', 'cost_variable_group_status', '要素分组状态'
+  union all select '核算-要素类型', 'cost_variable_type', '要素展示和处理类型'
+  union all select '核算-要素来源类型', 'cost_variable_source_type', '要素取值来源'
+  union all select '核算-要素数据类型', 'cost_variable_data_type', '要素数据类型'
+  union all select '核算-变量鉴权方式', 'cost_variable_auth_type', '远程要素鉴权方式'
+  union all select '核算-变量同步方式', 'cost_variable_sync_mode', '远程要素同步方式'
+  union all select '核算-变量缓存策略', 'cost_variable_cache_policy', '远程要素缓存策略'
+  union all select '核算-变量失败兜底策略', 'cost_variable_fallback_policy', '远程要素失败处理方式'
+  union all select '核算-变量状态', 'cost_variable_status', '要素维护状态'
+  union all select '核算-规则状态', 'cost_rule_status', '规则维护状态'
+  union all select '核算-规则类型', 'cost_rule_type', '规则定价类型'
+  union all select '核算-规则条件逻辑', 'cost_rule_condition_logic', '条件组之间的逻辑关系'
+  union all select '核算-规则操作符', 'cost_rule_operator', '条件比较操作符'
+  union all select '核算-阶梯区间模式', 'cost_rule_interval_mode', '阶梯边界模式'
+  union all select '核算-发布版本状态', 'cost_publish_version_status', '发布版本状态'
+  union all select '核算-试算状态', 'cost_simulation_status', '同步计费和试算状态'
+  union all select '核算-正式任务类型', 'cost_calc_task_type', '正式任务类型'
+  union all select '核算-正式任务状态', 'cost_calc_task_status', '正式任务状态'
+  union all select '核算-结果状态', 'cost_result_status', '正式结果状态'
+) seed
+where not exists (
+  select 1 from sys_dict_type current_type where current_type.dict_type = seed.dict_type
+);
+
+insert into sys_dict_data
+  (dict_sort, dict_label, dict_value, dict_type, css_class, list_class, is_default, status, create_by, create_time, remark)
+select seed.dict_sort, seed.dict_label, seed.dict_value, seed.dict_type, null, seed.list_class,
+       seed.is_default, '0', 'cost-lite', current_timestamp, seed.remark
+from (
+  select 1 dict_sort, '薪资结算' dict_label, 'SALARY' dict_value, 'cost_business_domain' dict_type, 'success' list_class, 'N' is_default, '业务域：薪资结算' remark
+  union all select 2, '港口作业', 'PORT', 'cost_business_domain', 'primary', 'Y', '业务域：港口作业'
+  union all select 3, '仓储结算', 'STORAGE', 'cost_business_domain', 'warning', 'N', '业务域：仓储结算'
+  union all select 4, '运输计费', 'TRANSPORT', 'cost_business_domain', 'info', 'N', '业务域：运输计费'
+  union all select 5, '材料成本', 'MATERIAL', 'cost_business_domain', 'danger', 'N', '业务域：材料成本'
+  union all select 6, '制造成本', 'MANUFACTURE', 'cost_business_domain', 'default', 'N', '业务域：制造成本'
+  union all select 1, '正常', '0', 'cost_scene_status', 'success', 'Y', '场景可维护且可被下游使用'
+  union all select 2, '停用', '1', 'cost_scene_status', 'danger', 'N', '场景已停用'
+  union all select 3, '草稿', '2', 'cost_scene_status', 'warning', 'N', '场景仍在整理中'
+  union all select 1, '合同场景', 'CONTRACT', 'cost_scene_type', 'primary', 'Y', '以合同为边界维护核算配置'
+  union all select 2, '核算主题', 'THEME', 'cost_scene_type', 'success', 'N', '以统一核算主题组织配置'
+  union all select 3, '业务方案', 'PLAN', 'cost_scene_type', 'warning', 'N', '以具体业务方案组织配置'
+  union all select 4, '公司级核算域', 'COMPANY', 'cost_scene_type', 'info', 'N', '以公司级统一口径组织配置'
+  union all select 1, '正常', '0', 'cost_fee_status', 'success', 'Y', '费目可维护'
+  union all select 2, '停用', '1', 'cost_fee_status', 'danger', 'N', '费目停用'
+  union all select 1, '吨', '吨', 'cost_unit_code', 'primary', 'Y', '重量单位'
+  union all select 2, '天', '天', 'cost_unit_code', 'success', 'N', '时间单位'
+  union all select 3, '次', '次', 'cost_unit_code', 'info', 'N', '次数单位'
+  union all select 4, '航次', '航次', 'cost_unit_code', 'warning', 'N', '航运业务单位'
+  union all select 5, '人', '人', 'cost_unit_code', 'primary', 'N', '人员单位'
+  union all select 6, '箱', '箱', 'cost_unit_code', 'success', 'N', '箱量单位'
+  union all select 7, '元', '元', 'cost_unit_code', 'danger', 'N', '金额单位'
+  union all select 8, '平方米*天', '平方米*天', 'cost_unit_code', 'warning', 'N', '仓储复合单位'
+  union all select 1, '正常', '0', 'cost_variable_group_status', 'success', 'Y', '要素分组可维护'
+  union all select 2, '停用', '1', 'cost_variable_group_status', 'danger', 'N', '要素分组停用'
+  union all select 1, '文本', 'TEXT', 'cost_variable_type', 'primary', 'Y', '文本要素'
+  union all select 2, '数值', 'NUMBER', 'cost_variable_type', 'success', 'N', '数值要素'
+  union all select 3, '字典下拉', 'DICT', 'cost_variable_type', 'warning', 'N', '字典要素'
+  union all select 4, '接口下拉', 'REMOTE', 'cost_variable_type', 'info', 'N', '第三方接口要素'
+  union all select 5, '公式', 'FORMULA', 'cost_variable_type', 'danger', 'N', '公式要素'
+  union all select 6, '布尔', 'BOOLEAN', 'cost_variable_type', 'default', 'N', '布尔要素'
+  union all select 7, '日期', 'DATE', 'cost_variable_type', 'default', 'N', '日期要素'
+  union all select 1, '手工输入', 'INPUT', 'cost_variable_source_type', 'primary', 'Y', '由调用方传入'
+  union all select 2, '字典接入', 'DICT', 'cost_variable_source_type', 'success', 'N', '从字典读取'
+  union all select 3, '第三方接口', 'REMOTE', 'cost_variable_source_type', 'warning', 'N', '从远程接口读取'
+  union all select 4, '公式派生', 'FORMULA', 'cost_variable_source_type', 'info', 'N', '由公式派生'
+  union all select 1, '字符串', 'STRING', 'cost_variable_data_type', 'primary', 'Y', '字符串数据'
+  union all select 2, '数值', 'NUMBER', 'cost_variable_data_type', 'success', 'N', '数值数据'
+  union all select 3, '布尔', 'BOOLEAN', 'cost_variable_data_type', 'warning', 'N', '布尔数据'
+  union all select 4, '日期', 'DATE', 'cost_variable_data_type', 'info', 'N', '日期数据'
+  union all select 5, 'JSON', 'JSON', 'cost_variable_data_type', 'default', 'N', 'JSON 数据'
+  union all select 1, '无鉴权', 'NONE', 'cost_variable_auth_type', 'info', 'Y', '无需鉴权'
+  union all select 2, 'Basic', 'BASIC', 'cost_variable_auth_type', 'primary', 'N', 'Basic 鉴权'
+  union all select 3, 'Bearer Token', 'BEARER', 'cost_variable_auth_type', 'success', 'N', 'Bearer Token 鉴权'
+  union all select 4, 'API Key', 'API_KEY', 'cost_variable_auth_type', 'warning', 'N', 'API Key 鉴权'
+  union all select 1, '实时拉取', 'REALTIME', 'cost_variable_sync_mode', 'primary', 'Y', '调用时实时拉取'
+  union all select 2, '准实时缓存', 'NEAR_REALTIME', 'cost_variable_sync_mode', 'success', 'N', '按短周期缓存刷新'
+  union all select 3, '定时同步', 'SCHEDULED', 'cost_variable_sync_mode', 'warning', 'N', '按任务定时同步'
+  union all select 1, '不缓存', 'NONE', 'cost_variable_cache_policy', 'info', 'N', '不做缓存'
+  union all select 2, 'TTL缓存', 'TTL', 'cost_variable_cache_policy', 'success', 'N', '按失效时间缓存'
+  union all select 3, '手动刷新', 'MANUAL_REFRESH', 'cost_variable_cache_policy', 'primary', 'Y', '仅手动刷新'
+  union all select 1, '失败即终止', 'FAIL_FAST', 'cost_variable_fallback_policy', 'danger', 'Y', '失败后直接终止'
+  union all select 2, '回退默认值', 'DEFAULT_VALUE', 'cost_variable_fallback_policy', 'warning', 'N', '失败后使用默认值'
+  union all select 3, '回退快照值', 'LAST_SNAPSHOT', 'cost_variable_fallback_policy', 'info', 'N', '失败后回退最近快照值'
+  union all select 1, '正常', '0', 'cost_variable_status', 'success', 'Y', '要素可维护'
+  union all select 2, '停用', '1', 'cost_variable_status', 'danger', 'N', '要素停用'
+  union all select 1, '正常', '0', 'cost_rule_status', 'success', 'Y', '规则可维护'
+  union all select 2, '停用', '1', 'cost_rule_status', 'danger', 'N', '规则停用'
+  union all select 1, '固定费率', 'FIXED_RATE', 'cost_rule_type', 'primary', 'Y', '固定费率规则'
+  union all select 2, '固定金额', 'FIXED_AMOUNT', 'cost_rule_type', 'success', 'N', '固定金额规则'
+  union all select 3, '公式金额', 'FORMULA', 'cost_rule_type', 'warning', 'N', '公式金额规则'
+  union all select 4, '阶梯费率', 'TIER_RATE', 'cost_rule_type', 'info', 'N', '阶梯费率规则'
+  union all select 1, '且', 'AND', 'cost_rule_condition_logic', 'primary', 'Y', '条件同时满足'
+  union all select 2, '或', 'OR', 'cost_rule_condition_logic', 'warning', 'N', '条件任一满足'
+  union all select 1, '等于', 'EQ', 'cost_rule_operator', 'primary', 'Y', '等于'
+  union all select 2, '不等于', 'NE', 'cost_rule_operator', 'info', 'N', '不等于'
+  union all select 3, '大于', 'GT', 'cost_rule_operator', 'warning', 'N', '大于'
+  union all select 4, '大于等于', 'GE', 'cost_rule_operator', 'success', 'N', '大于等于'
+  union all select 5, '小于', 'LT', 'cost_rule_operator', 'warning', 'N', '小于'
+  union all select 6, '小于等于', 'LE', 'cost_rule_operator', 'success', 'N', '小于等于'
+  union all select 7, '包含任一值', 'IN', 'cost_rule_operator', 'info', 'N', '多值包含'
+  union all select 8, '不包含', 'NOT_IN', 'cost_rule_operator', 'danger', 'N', '多值排除'
+  union all select 9, '区间', 'BETWEEN', 'cost_rule_operator', 'primary', 'N', '区间比较'
+  union all select 10, '表达式', 'EXPR', 'cost_rule_operator', 'default', 'N', '表达式条件'
+  union all select 11, '为空', 'IS_NULL', 'cost_rule_operator', 'warning', 'N', '空值判断'
+  union all select 12, '不为空', 'IS_NOT_NULL', 'cost_rule_operator', 'success', 'N', '非空判断'
+  union all select 1, '左闭右开 [a,b)', 'LEFT_CLOSED_RIGHT_OPEN', 'cost_rule_interval_mode', 'primary', 'Y', 'start <= x < end'
+  union all select 2, '左开右闭 (a,b]', 'LEFT_OPEN_RIGHT_CLOSED', 'cost_rule_interval_mode', 'warning', 'N', 'start < x <= end'
+  union all select 1, '已发布', 'PUBLISHED', 'cost_publish_version_status', 'primary', 'Y', '已发布未生效'
+  union all select 2, '生效中', 'ACTIVE', 'cost_publish_version_status', 'success', 'N', '当前生效版本'
+  union all select 3, '已回滚', 'ROLLED_BACK', 'cost_publish_version_status', 'warning', 'N', '已被回滚的版本'
+  union all select 1, '成功', 'SUCCESS', 'cost_simulation_status', 'success', 'Y', '试算成功'
+  union all select 2, '失败', 'FAILED', 'cost_simulation_status', 'danger', 'N', '试算失败'
+  union all select 1, '单笔正式核算', 'FORMAL_SINGLE', 'cost_calc_task_type', 'primary', 'Y', '单笔正式核算'
+  union all select 2, '批量正式核算', 'FORMAL_BATCH', 'cost_calc_task_type', 'warning', 'N', '批量正式核算'
+  union all select 1, '待执行', 'INIT', 'cost_calc_task_status', 'info', 'Y', '任务初始化'
+  union all select 2, '执行中', 'RUNNING', 'cost_calc_task_status', 'primary', 'N', '任务执行中'
+  union all select 3, '成功', 'SUCCESS', 'cost_calc_task_status', 'success', 'N', '任务全部成功'
+  union all select 4, '部分成功', 'PART_SUCCESS', 'cost_calc_task_status', 'warning', 'N', '任务部分成功'
+  union all select 5, '失败', 'FAILED', 'cost_calc_task_status', 'danger', 'N', '任务失败'
+  union all select 6, '已取消', 'CANCELLED', 'cost_calc_task_status', 'default', 'N', '任务已取消'
+  union all select 1, '成功', 'SUCCESS', 'cost_result_status', 'success', 'Y', '结果成功'
+  union all select 2, '失败', 'FAILED', 'cost_result_status', 'danger', 'N', '结果失败'
+  union all select 3, '调整后', 'ADJUSTED', 'cost_result_status', 'warning', 'N', '结果经调整'
+) seed
+where not exists (
+  select 1 from sys_dict_data current_data
+  where current_data.dict_type = seed.dict_type and current_data.dict_value = seed.dict_value
+);
+
 -- End of Cost Lite MySQL schema baseline.

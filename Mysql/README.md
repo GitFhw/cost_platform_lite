@@ -9,6 +9,20 @@
 
 两种方式使用同一套表名和字段。区别只有 JDBC 地址，不需要修改计费实体或 Starter。
 
+### 1.1 配置归属和组件职责
+
+数据库账号密码不打进 Jar，也不写入 Git。MySQL 运行 Jar 在启动时读取环境变量或 Jar 外部的 `application.yml`；Starter 不读取数据库配置，只负责在业务项目中提供 `/cost-lite/**` 代理 Controller，并把请求转给 MySQL Jar。
+
+因此两种部署的配置边界如下：
+
+| 组件 | 配置内容 | 是否连接数据库 |
+| --- | --- | --- |
+| MySQL 运行 Jar | JDBC URL、数据库账号密码、运行端口、管理 Token | 是，连接专用库或业务库 |
+| 业务项目 Starter | MySQL Jar 地址、代理路径、超时、令牌 | 否 |
+| `Front/` 工作台 | `/cost-lite` 或 `/cost` 路由模式 | 否 |
+
+当前推荐的正式接入形态是“业务项目前端 + 业务项目 Starter + MySQL 运行 Jar”。运行 Jar 内置轻量 Controller、计费核心和 MySQL 方言适配；Starter 本身不是计费核心，也不把母体 Controller、Service、Mapper 复制进业务项目。
+
 ## 2. 环境要求
 
 - 轻量计费运行 Jar：JDK 17。
@@ -21,13 +35,13 @@
 ### 3.1 独立库
 
 ```sql
-create database cost_lite
+create database if not exists cost_platform_lite
   default character set utf8mb4
   collate utf8mb4_general_ci;
 ```
 
 ```bash
-mysql -h 127.0.0.1 -P 3306 -u root -p cost_lite < Mysql/sql/cost-lite-schema.sql
+mysql -h 127.0.0.1 -P 3306 -u root -p cost_platform_lite < Mysql/sql/cost-lite-schema.sql
 ```
 
 ### 3.2 复用业务库
@@ -39,6 +53,8 @@ mysql -h 127.0.0.1 -P 3306 -u app_user -p business_db < Mysql/sql/cost-lite-sche
 ```
 
 脚本使用母体平台表名，不创建轻量版平行实体。已有同名表时应先比对字段，不要直接覆盖。
+
+脚本只包含当前轻量 Jar 和工作台所需的 26 张 `cost_*` 表：场景、费目、要素、规则、发布、试算、正式任务、结果追溯，以及运行所需的账期控制、审计和异常治理表；另包含母体字典实体对应的 `sys_dict_type`、`sys_dict_data` 两张字典表。`cost_bill_period` 是正式任务的账期运行控制表，不是账单明细表；脚本不包含 RuoYi 的其他 `sys_*` 表、宿主基础设施表、客户业务表或无关账单表，也不依赖宿主字典接口。前端下拉直接读取当前轻量库字典，修改字典表后刷新页面即可。
 
 ### 3.3 初始化检查
 
@@ -64,10 +80,11 @@ Mysql/runtime/cost-lite-server-1.0.0.jar
 ```powershell
 $env:COST_LITE_DB_HOST = "127.0.0.1"
 $env:COST_LITE_DB_PORT = "3306"
-$env:COST_LITE_DB_NAME = "cost_lite"
-$env:COST_LITE_DB_USERNAME = "cost_lite"
+$env:COST_LITE_DB_NAME = "cost_platform_lite"
+$env:COST_LITE_DB_USERNAME = "root"
 $env:COST_LITE_DB_PASSWORD = "请替换为真实密码"
 $env:COST_LITE_SERVER_PORT = "18080"
+$env:COST_LITE_LOG_PATH = "D:\\apps\\cost-lite\\logs"
 
 .\Mysql\bin\start-cost-lite.ps1
 ```
@@ -83,15 +100,39 @@ $env:COST_LITE_SERVER_PORT = "18080"
 ```bash
 export COST_LITE_DB_HOST=127.0.0.1
 export COST_LITE_DB_PORT=3306
-export COST_LITE_DB_NAME=cost_lite
-export COST_LITE_DB_USERNAME=cost_lite
+export COST_LITE_DB_NAME=cost_platform_lite
+export COST_LITE_DB_USERNAME=root
 export COST_LITE_DB_PASSWORD='请替换为真实密码'
 export COST_LITE_SERVER_PORT=18080
+export COST_LITE_LOG_PATH=/opt/cost-lite/logs
 
 bash Mysql/bin/start-cost-lite.sh
 ```
 
 生产环境应由 systemd、容器平台或现有进程管理器托管，不要把密码写入脚本或 Git。
+
+### 4.3 使用 Jar 外部 `application.yml`
+
+数据库配置建议放在运行 Jar 外部，由部署环境注入；不要修改 Jar 内部配置。仓库提供的 `Mysql/config/application-mysql.yml` 可以直接作为模板：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://数据库地址:3306/目标数据库?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: 计费数据库账号
+    password: ${COST_LITE_DB_PASSWORD}
+```
+
+启动时指定 MySQL profile 和外部配置目录：
+
+```powershell
+$env:COST_LITE_DB_PASSWORD = "请替换为真实密码"
+java -jar .\Mysql\runtime\cost-lite-server-1.0.0.jar `
+  --spring.profiles.active=mysql `
+  --spring.config.additional-location="optional:file:./Mysql/config/"
+```
+
+这里的“外部配置”是运行 Jar 所在部署单元的配置，不是把数据库账号交给前端。若 Jar 独立部署，它读取 Jar 进程的环境变量或配置文件；业务项目 Starter 只读取自己的 `base-url` 和令牌。
 
 ## 5. 验证运行服务
 
@@ -107,7 +148,8 @@ curl http://127.0.0.1:18080/cost/lite/health
   "data": {
     "service": "UP",
     "database": "UP",
-    "databaseProduct": "MySQL"
+    "databaseProduct": "MySQL",
+    "databaseName": "cost_platform_lite"
   }
 }
 ```
@@ -139,6 +181,8 @@ Starter 和 Client 均以 Java 8 编译。Client 不依赖 Spring；Starter 同�
 ```
 
 正式环境建议把两个制品发布到企业 Maven 仓库，业务项目只保留普通 Maven 依赖。
+
+这里的 Starter 是宿主侧 HTTP 代理适配器，不是数据库运行 Jar。它不承载计费公式、规则匹配和结果落库逻辑；这些逻辑都在 `Mysql/runtime/cost-lite-server-1.0.0.jar` 中执行。
 
 ## 8. 配置宿主后端
 
@@ -179,26 +223,18 @@ Starter 只注册代理 Controller，不接管宿主鉴权。应由宿主安全�
 
 ## 10. 字典差异处理
 
-计费数据库始终保存母体统一编码。宿主字典名称和值不一致时，在运行 Jar 外部配置增加映射，不修改表和实体：
+计费数据库始终保存母体统一编码。工作台通过 `/cost/dictionary/options` 读取轻量库的 `sys_dict_data`，中文名称和可选值由数据库维护。目标项目的字典名称或值需要变化时，直接修改对应字典数据，不需要改前端代码，也不需要接入宿主字典表。Jar 默认使用轻量库字典校验：
 
 ```yaml
 cost:
   lite:
     dictionary:
-      provider: CONFIG
-      type-mappings:
-        cost_scene_status: biz_scene_status
-      value-mappings:
-        cost_scene_status:
-          "0": ENABLED
-          "1": DISABLED
-      values:
-        biz_scene_status:
-          - ENABLED
-          - DISABLED
+      provider: SYSTEM
+      validation-enabled: true
+      allow-unconfigured-types: true
 ```
 
-特殊字典表或动态接口可替换 `CostDictionaryProvider`，该扩展不改变计费核心。
+其中 `SYSTEM` 指当前 Jar 连接的轻量库字典表，不是读取宿主数据库。只有确实要把宿主已有字典映射到计费统一编码时，才使用可选的 `CONFIG` 或 `CostDictionaryProvider` 扩展。
 
 ## 11. 接入前端
 
@@ -308,4 +344,4 @@ curl -X POST http://127.0.0.1:8080/cost-lite/calculate \
 
 ### 业务系统字典不一致
 
-优先修改 YAML 的 `type-mappings` 和 `value-mappings`，不要改计费表中的统一编码。
+直接维护当前轻量库 `sys_dict_type`、`sys_dict_data` 中对应的计费字典名称和值，刷新工作台即可生效；不要修改计费表中的统一编码。只有明确需要复用宿主已有字典、且不把宿主字典表迁入轻量库时，才通过可插拔字典适配器处理映射。
