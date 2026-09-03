@@ -18,7 +18,7 @@ import {
  */
 const costLiteApi = createCostLiteApi(
   (request) => api.request(request),
-  { basePath: "/business/cost-lite" },
+  { basePath: "/cost" },
 );
 </script>
 

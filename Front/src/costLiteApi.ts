@@ -207,7 +207,7 @@ export function createCostLiteApi(
   options: CostLiteApiOptions = {},
 ): CostLiteApi {
   const routeMode = options.routeMode || "proxy";
-  const basePath = options.basePath || (routeMode === "runtime" ? "/cost" : "/cost-lite");
+  const basePath = options.basePath || "/cost";
 
   const route = (proxyPath: string, runtimePath: string): string =>
     routeMode === "runtime" ? runtimePath : proxyPath;

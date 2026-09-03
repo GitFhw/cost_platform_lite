@@ -7,7 +7,7 @@ import {
 
 const costLiteApi = createCostLiteApi(
   (config) => request(config),
-  { basePath: "/cost-lite" },
+  { basePath: "/cost" },
 );
 </script>
 

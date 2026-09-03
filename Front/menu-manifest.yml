@@ -1,8 +1,8 @@
 name: 轻量计费
 route: /cost/lite
 icon: carbon:calculator
-frontendApiPrefix: /business/cost-lite
-businessServiceWebPath: /cost-lite
+frontendApiPrefix: /cost
+businessServiceWebPath: /cost
 menu:
   rootId: cost-lite-root
   pageId: cost-lite-workbench

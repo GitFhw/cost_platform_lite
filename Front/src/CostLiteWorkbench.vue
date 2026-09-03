@@ -1598,7 +1598,7 @@ const integrationExample = computed(() => {
   }
   const requestJson = JSON.stringify(payload, null, 2);
   const baseUrl = typeof window === "undefined" ? "http://127.0.0.1:8080" : window.location.origin;
-  const starterPath = isBatch ? "/cost-lite/simulations/batch" : "/cost-lite/calculate";
+  const starterPath = isBatch ? "/cost/simulations/batch" : "/cost/calculate";
   const runtimePath = isBatch ? "/cost/run/simulation/batch-execute" : "/cost/run/fee/calculate";
   const starterEndpoint = `${baseUrl}${starterPath}`;
   const runtimeEndpoint = `${baseUrl}${runtimePath}`;
