@@ -134,9 +134,11 @@ const detailTitle = ref("详情");
 const detailJson = ref<unknown>({});
 const precheckResult = ref<CostLiteRecord>({});
 const trialFeeId = ref<number | string>();
+const simulationMode = ref<"single" | "batch">("single");
 const integrationDialogVisible = ref(false);
 const integrationExampleTab = ref<"request" | "starter" | "runtime">("request");
 const integrationExampleScope = ref<"scene" | "fee">("scene");
+const integrationExampleMode = ref<"sync" | "batch">("sync");
 
 const selectedScene = computed(() =>
   scenes.value.find((item) => String(item.sceneId) === String(selectedSceneId.value)),
@@ -290,6 +292,21 @@ function statusTagType(dictType: string, value: unknown): "success" | "info" | "
 function formatDateTime(value: unknown): string {
   if (!value) return "-";
   return String(value).replace("T", " ").replace(/\.\d+$/, "");
+}
+
+function formatSimulationAmount(value: unknown): string {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toFixed(2) : "-";
+}
+
+function simulationFeeSummary(result: CostLiteRecord): string {
+  const feeResults = Array.isArray(result?.feeResults) ? result.feeResults : [];
+  if (!feeResults.length) {
+    return "未命中费目";
+  }
+  return feeResults
+    .map((fee: CostLiteRecord) => `${fee.feeName || fee.feeCode || "-"} ${formatSimulationAmount(fee.amountValue)}`)
+    .join("；");
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -1528,18 +1545,47 @@ const simulationForm = reactive<CostLiteRecord>({
   inputJson: "{\n  \"bizNo\": \"DEMO-001\"\n}",
 });
 const simulationResult = ref<CostLiteRecord>({});
+const batchSimulationRows = computed(() => {
+  const records = simulationResult.value.records;
+  if (!Array.isArray(records)) {
+    return [];
+  }
+  return records.map((record: CostLiteRecord) => ({
+    record,
+    result: record?.result && typeof record.result === "object" && !Array.isArray(record.result)
+      ? record.result
+      : {},
+  }));
+});
+const batchSimulationAmountTotal = computed(() => batchSimulationRows.value.reduce(
+  (total, row) => total + Number(row.result.amountTotal || 0),
+  0,
+));
 
 const integrationExample = computed(() => {
   const sceneId = selectedSceneId.value || "<sceneId>";
   const versionId = simulationForm.versionId || activeVersionId.value || "<versionId>";
   const exampleFee = integrationExampleScope.value === "fee" ? selectedFee.value : undefined;
-  const input = (() => {
+  const parsedInput = (() => {
     try {
       return JSON.parse(simulationForm.inputJson);
     } catch {
       return { bizNo: "ORDER-001", objectCode: "ORDER-001", quantity: 1 };
     }
   })();
+  const isBatch = integrationExampleMode.value === "batch";
+  const input = isBatch
+    ? (Array.isArray(parsedInput)
+      ? parsedInput
+      : [
+        parsedInput,
+        {
+          ...(parsedInput && typeof parsedInput === "object" ? parsedInput : {}),
+          bizNo: "ORDER-002",
+          objectCode: "ORDER-002",
+        },
+      ])
+    : (Array.isArray(parsedInput) ? parsedInput[0] || {} : parsedInput);
   const payload: CostLiteRecord = {
     sceneId,
     versionId,
@@ -1552,37 +1598,42 @@ const integrationExample = computed(() => {
   }
   const requestJson = JSON.stringify(payload, null, 2);
   const baseUrl = typeof window === "undefined" ? "http://127.0.0.1:8080" : window.location.origin;
-  const starterEndpoint = `${baseUrl}/cost-lite/open/calculate`;
-  const runtimeEndpoint = `${baseUrl}/cost/open/fee/calculate`;
+  const starterPath = isBatch ? "/cost-lite/simulations/batch" : "/cost-lite/calculate";
+  const runtimePath = isBatch ? "/cost/run/simulation/batch-execute" : "/cost/run/fee/calculate";
+  const starterEndpoint = `${baseUrl}${starterPath}`;
+  const runtimeEndpoint = `${baseUrl}${runtimePath}`;
   const shellBody = requestJson.replace(/'/g, "'\\''");
   const starterCurl = [
     `curl -X POST ${starterEndpoint}`,
     '  -H "Content-Type: application/json"',
-    '  -H "X-Cost-Open-Token: $TOKEN"',
     `  -d '${shellBody}'`,
   ].join("\n");
   const runtimeCurl = [
     `curl -X POST ${runtimeEndpoint}`,
     '  -H "Content-Type: application/json"',
-    '  -H "X-Cost-Open-Token: $TOKEN"',
+    '  -H "X-Cost-Lite-Token: $ADMIN_TOKEN"',
     `  -d '${shellBody}'`,
   ].join("\n");
   return {
     sceneName: selectedScene.value?.sceneName || "当前场景",
     sceneCode: selectedScene.value?.sceneCode || "-",
     scope: integrationExampleScope.value,
+    mode: integrationExampleMode.value,
+    modeName: isBatch ? "批量试算" : "同步计费",
     feeName: exampleFee?.feeName || "场景全部费目",
     feeCode: exampleFee?.feeCode || "ALL_FEES",
+    starterPath,
+    runtimePath,
     requestJson,
     starterCurl,
     runtimeCurl,
     params: [
       { name: "sceneId", required: "是", description: "场景主键，来自场景列表。" },
-      { name: "versionId", required: "是", description: "生产调用传生效版本主键，禁止业务系统自行读取配置表。" },
+      { name: "versionId", required: "是", description: isBatch ? "受保护试算建议传要验证的配置版本；生产正式核算固定传生效版本。" : "生产调用传生效版本主键，禁止业务系统自行读取配置表。" },
       { name: "feeId", required: exampleFee?.feeId ? "当前示例已传" : "可选", description: "传入后只计算当前费目；不传则计算场景下全部费目。" },
       { name: "billMonth", required: "是", description: "账期，格式 yyyy-MM。" },
-      { name: "inputJson", required: "是", description: "业务真实数据 JSON 字符串，字段以生成的费目模板为准。" },
-      { name: "includeExplain", required: "否", description: "是否返回规则、要素和定价解释，联调阶段建议 true。" },
+      { name: "inputJson", required: "是", description: isBatch ? "JSON 字符串，内容必须是业务对象数组；每条建议带唯一 bizNo。" : "业务真实数据 JSON 字符串，内容必须是对象，字段以生成的费目模板为准。" },
+      { name: "includeExplain", required: "否", description: isBatch ? "是否把逐条规则解释写入试算结果；批量联调可按响应大小决定。" : "是否返回规则、要素和定价解释，联调阶段建议 true。" },
     ],
   };
 });
@@ -1599,6 +1650,7 @@ function openIntegrationExample(): void {
     return;
   }
   integrationExampleTab.value = "request";
+  integrationExampleMode.value = "sync";
   integrationDialogVisible.value = true;
 }
 
@@ -1631,7 +1683,20 @@ async function fillInputTemplate(): Promise<void> {
       trialFeeId.value ? [trialFeeId.value] : undefined,
     );
     const value = template.inputJson || template.sampleInputJson || template.template || template;
-    simulationForm.inputJson = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    if (simulationMode.value === "batch") {
+      let parsedTemplate: unknown = value;
+      if (typeof value === "string") {
+        try {
+          parsedTemplate = JSON.parse(value);
+        } catch {
+          parsedTemplate = {};
+        }
+      }
+      const items = Array.isArray(parsedTemplate) ? parsedTemplate : [parsedTemplate];
+      simulationForm.inputJson = JSON.stringify(items, null, 2);
+    } else {
+      simulationForm.inputJson = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    }
     ElMessage.success("输入模板已生成");
   } catch (error) {
     ElMessage.error(errorMessage(error, "输入模板生成失败"));
@@ -1657,17 +1722,31 @@ async function runSimulation(): Promise<void> {
     ElMessage.error((error as Error).message);
     return;
   }
+  if (simulationMode.value === "batch" && !Array.isArray(parsed)) {
+    ElMessage.warning("批量试算输入必须是 JSON 数组，每个数组项是一条业务数据");
+    return;
+  }
+  if (simulationMode.value === "single"
+    && (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))) {
+    ElMessage.warning("单条试算输入必须是 JSON 对象");
+    return;
+  }
   loading.running = true;
   try {
-    simulationResult.value = await api().executeSimulation({
+    const request = {
       sceneId: selectedSceneId.value,
       versionId: simulationForm.versionId || activeVersionId.value,
       feeId: trialFeeId.value || undefined,
       billMonth: simulationForm.billMonth,
       inputJson: JSON.stringify(parsed),
       includeExplain: simulationForm.includeExplain,
-    });
-    ElMessage.success("试算完成，试算日志和结果已留存");
+    };
+    simulationResult.value = simulationMode.value === "batch"
+      ? await api().executeSimulationBatch(request)
+      : await api().executeSimulation(request);
+    ElMessage.success(simulationMode.value === "batch"
+      ? "批量试算完成，每条数据的日志和结果已留存"
+      : "试算完成，试算日志和结果已留存");
     await loadBillingLogs();
   } catch (error) {
     ElMessage.error(errorMessage(error, "计费执行失败"));
@@ -2035,6 +2114,10 @@ onMounted(initialize);
                     :value="fee.feeId"
                   />
                 </el-select>
+                <el-radio-group v-model="simulationMode" size="small" aria-label="试算方式">
+                  <el-radio-button label="single">单条试算</el-radio-button>
+                  <el-radio-button label="batch">批量试算</el-radio-button>
+                </el-radio-group>
                 <el-checkbox v-model="simulationForm.includeExplain">返回解释</el-checkbox>
                 <el-button :loading="loading.template" @click="fillInputTemplate">生成模板</el-button>
               </div>
@@ -2044,7 +2127,9 @@ onMounted(initialize);
                 :autosize="{ minRows: 8, maxRows: 16 }"
                 spellcheck="false"
               />
-              <div class="simulation-scope-note">当前试算：{{ trialScopeLabel() }}；输入区请替换为业务系统真实请求数据。</div>
+              <div class="simulation-scope-note">
+                当前试算：{{ trialScopeLabel() }}；{{ simulationMode === 'batch' ? '批量输入必须是对象数组，每条建议带唯一 bizNo；' : '' }}输入区请替换为业务系统真实请求数据。
+              </div>
               <div class="simulation-actions">
                 <el-button type="primary" :icon="VideoPlay" :loading="loading.running" @click="runSimulation">
                   执行试算
@@ -2055,6 +2140,22 @@ onMounted(initialize);
               <div class="preview-header">
                 <strong>执行结果</strong>
                 <el-button v-if="Object.keys(simulationResult).length" link :icon="View" @click="detailTitle = '执行结果'; detailJson = simulationResult; detailVisible = true">展开</el-button>
+              </div>
+              <div v-if="simulationMode === 'batch' && batchSimulationRows.length" class="batch-result-summary">
+                <div class="batch-result-summary-header">
+                  <span>批量金额摘要</span>
+                  <strong>合计 {{ formatSimulationAmount(batchSimulationAmountTotal) }}</strong>
+                </div>
+                <div class="batch-result-list">
+                  <div v-for="row in batchSimulationRows" :key="row.record.simulationId" class="batch-result-row">
+                    <strong class="batch-result-biz-no">{{ row.record.bizNo || '-' }}</strong>
+                    <el-tag :type="statusTagType('cost_simulation_status', row.record.status)" size="small">
+                      {{ dictLabel('cost_simulation_status', row.record.status) }}
+                    </el-tag>
+                    <span class="batch-result-fees">{{ simulationFeeSummary(row.result) }}</span>
+                    <strong class="batch-result-amount">{{ formatSimulationAmount(row.result.amountTotal) }}</strong>
+                  </div>
+                </div>
               </div>
               <pre>{{ Object.keys(simulationResult).length ? JSON.stringify(simulationResult, null, 2) : '等待执行' }}</pre>
             </div>
@@ -2536,6 +2637,10 @@ onMounted(initialize);
           <strong>{{ integrationExample.sceneName }}</strong>
           <small>{{ integrationExample.sceneCode }}</small>
         </div>
+        <el-radio-group v-model="integrationExampleMode" size="small" aria-label="调用示例类型">
+          <el-radio-button label="sync">同步计费</el-radio-button>
+          <el-radio-button label="batch">批量试算</el-radio-button>
+        </el-radio-group>
         <el-radio-group v-model="integrationExampleScope" size="small">
           <el-radio-button label="scene">场景全部费目</el-radio-button>
           <el-radio-button label="fee" :disabled="!selectedFeeId">当前选中费目</el-radio-button>
@@ -2547,7 +2652,9 @@ onMounted(initialize);
         :closable="false"
         show-icon
       >
-        <template #default>当前示例：{{ integrationExample.feeName }}（{{ integrationExample.feeCode }}）。生产请求固定使用生效版本，令牌和数据库账号不要下发到浏览器。</template>
+        <template #default>
+          当前示例：{{ integrationExample.modeName }}，{{ integrationExample.feeName }}（{{ integrationExample.feeCode }}）。Starter 由宿主配置管理令牌并保护路由；独立 Jar 使用管理令牌。正式核算路径只在接口文档中说明，不在此处开放。
+        </template>
       </el-alert>
       <el-tabs v-model="integrationExampleTab" class="integration-tabs">
         <el-tab-pane label="请求 JSON" name="request">
@@ -2559,14 +2666,14 @@ onMounted(initialize);
         </el-tab-pane>
         <el-tab-pane label="Starter 代理调用" name="starter">
           <div class="integration-code-toolbar">
-            <span>/cost-lite/open/calculate</span>
+            <span>{{ integrationExample.starterPath }}</span>
             <el-button link :icon="CopyDocument" title="复制 Starter 调用示例" @click="copyText(integrationExample.starterCurl)" />
           </div>
           <pre class="integration-code">{{ integrationExample.starterCurl }}</pre>
         </el-tab-pane>
         <el-tab-pane label="独立 Jar 调用" name="runtime">
           <div class="integration-code-toolbar">
-            <span>/cost/open/fee/calculate</span>
+            <span>{{ integrationExample.runtimePath }}</span>
             <el-button link :icon="CopyDocument" title="复制独立 Jar 调用示例" @click="copyText(integrationExample.runtimeCurl)" />
           </div>
           <pre class="integration-code">{{ integrationExample.runtimeCurl }}</pre>
@@ -3143,6 +3250,59 @@ onMounted(initialize);
   justify-content: space-between;
   color: #f8fafc;
   border-bottom: 1px solid #344054;
+}
+
+.batch-result-summary {
+  padding: 9px 12px 0;
+  color: #f8fafc;
+  border-bottom: 1px solid #344054;
+}
+
+.batch-result-summary-header,
+.batch-result-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+}
+
+.batch-result-summary-header {
+  grid-template-columns: 1fr auto;
+  margin-bottom: 7px;
+  font-size: 12px;
+  color: #98a2b3;
+}
+
+.batch-result-summary-header strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.batch-result-list {
+  max-height: 132px;
+  overflow: auto;
+}
+
+.batch-result-row {
+  grid-template-columns: minmax(110px, 0.8fr) auto minmax(120px, 1.5fr) auto;
+  min-height: 32px;
+  border-top: 1px solid rgba(52, 64, 84, 0.75);
+  font-size: 12px;
+}
+
+.batch-result-biz-no,
+.batch-result-fees {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-result-fees {
+  color: #d0d5dd;
+}
+
+.batch-result-amount {
+  color: #84ca9c;
+  text-align: right;
 }
 
 .result-preview pre,

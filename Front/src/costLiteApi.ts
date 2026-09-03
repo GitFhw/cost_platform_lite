@@ -95,6 +95,7 @@ export interface CostLiteApi {
   getInputTemplate(sceneId: number | string, feeIds?: Array<number | string>): Promise<CostLiteRecord>;
   calculate(data: CostLiteRecord): Promise<CostLiteRecord>;
   executeSimulation(data: CostLiteRecord): Promise<CostLiteRecord>;
+  executeSimulationBatch(data: CostLiteRecord): Promise<CostLiteRecord>;
   precheckTask?(data: CostLiteRecord): Promise<CostLiteRecord>;
   submitTask(data: CostLiteRecord): Promise<CostLiteRecord>;
 
@@ -355,6 +356,12 @@ export function createCostLiteApi(
     executeSimulation: async (data) => recordOf(await request(
       "POST",
       route("/simulations", "/run/simulation/execute"),
+      undefined,
+      data,
+    )),
+    executeSimulationBatch: async (data) => recordOf(await request(
+      "POST",
+      route("/simulations/batch", "/run/simulation/batch-execute"),
       undefined,
       data,
     )),
