@@ -83,7 +83,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService {
             alarmRecordMapper.insert(alarmRecord);
             mergedAlarm = alarmRecord;
         }
-        enrichSceneInfo(List.of(mergedAlarm));
+        enrichSceneInfo(java.util.Arrays.asList(mergedAlarm));
         notifyAlarmWebhook(mergedAlarm);
     }
 
@@ -310,7 +310,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setAccept(List.of(MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN));
+            headers.setAccept(java.util.Arrays.asList(MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN));
 
             Map<String, Object> extraHeaders = parseOptionalJsonMap(configService.selectConfigByKey(ALARM_WEBHOOK_HEADERS_KEY));
             extraHeaders.forEach((key, value) -> {
@@ -387,16 +387,16 @@ public class CostAlarmServiceImpl implements ICostAlarmService {
 
     private Map<String, Object> parseOptionalJsonMap(String json) {
         if (StringUtils.isEmpty(StringUtils.trim(json))) {
-            return Map.of();
+            return java.util.Collections.emptyMap();
         }
         try {
             Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {
             });
-            return parsed == null ? Map.of() : parsed;
+            return parsed == null ? java.util.Collections.emptyMap() : parsed;
         } catch (Exception e) {
             log.warn("解析告警 Webhook 头配置失败: {}", e.getMessage());
         }
-        return Map.of();
+        return java.util.Collections.emptyMap();
     }
 
     private String maskWebhookUrl(String webhookUrl) {
@@ -425,7 +425,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService {
         LocalDate end = LocalDate.now(zoneId);
         LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
         for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-            List<CostAlarmRecord> dayAlarms = dayGroups.getOrDefault(date, List.of());
+            List<CostAlarmRecord> dayAlarms = dayGroups.getOrDefault(date, java.util.Arrays.asList());
             LinkedHashMap<String, Object> row = new LinkedHashMap<>();
             row.put("date", date.format(formatter));
             row.put("count", dayAlarms.stream().mapToLong(this::resolveOccurrenceCount).sum());

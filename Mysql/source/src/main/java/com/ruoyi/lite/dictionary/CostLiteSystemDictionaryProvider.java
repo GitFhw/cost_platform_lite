@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
  */
 @Primary
 @Component
-@ConditionalOnProperty(prefix = "cost.lite.dictionary", name = "provider", havingValue = "SYSTEM")
+@ConditionalOnProperty(prefix = "cost.lite.dictionary", name = "provider", havingValue = "SYSTEM", matchIfMissing = true)
 public class CostLiteSystemDictionaryProvider implements CostDictionaryProvider {
     private final CostLiteProperties.Dictionary dictionary;
     private final CostDictionaryProvider delegate;

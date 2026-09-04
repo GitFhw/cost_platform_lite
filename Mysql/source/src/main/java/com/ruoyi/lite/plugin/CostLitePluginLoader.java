@@ -2,7 +2,7 @@ package com.ruoyi.lite.plugin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.lite.config.CostLiteProperties;
-import jakarta.annotation.PostConstruct;
+import javax.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

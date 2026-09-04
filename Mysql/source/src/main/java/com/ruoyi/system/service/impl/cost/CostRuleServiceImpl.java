@@ -169,7 +169,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
      * 新增规则
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int insertRule(CostRuleSaveBo rule) {
         CostRule entity = buildAndValidateRule(rule, false);
         int rows = ruleMapper.insert(entity);
@@ -182,7 +182,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
      * 修改规则
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int updateRule(CostRuleSaveBo rule) {
         if (rule.getRuleId() == null) {
             throw new ServiceException("规则主键不能为空");
@@ -208,7 +208,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
      * 仅开放新规则基础信息和条件值覆盖。
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int copyRule(CostRuleCopyBo request) {
         CostRuleSaveBo source = selectRuleDetail(request.getSourceRuleId());
         if (StringUtils.isNull(source)) {
@@ -482,11 +482,13 @@ public class CostRuleServiceImpl implements ICostRuleService {
         Map<String, Object> pricingConfig = rule.getPricingConfig() == null ? new LinkedHashMap<>() : rule.getPricingConfig();
         if (PRICING_MODE_GROUPED.equalsIgnoreCase(rule.getPricingMode()) && matchedGroupNo != null) {
             Object rawGroupPrices = pricingConfig.get("groupPrices");
-            if (rawGroupPrices instanceof List<?> rawList) {
+            if (rawGroupPrices instanceof List) {
+                List<?> rawList = (List<?>) rawGroupPrices;
                 for (Object item : rawList) {
-                    if (!(item instanceof Map<?, ?> rawMap)) {
+                    if (!(item instanceof Map)) {
                         continue;
                     }
+                    Map<?, ?> rawMap = (Map<?, ?>) item;
                     Integer groupNo = toInteger(rawMap.get("groupNo"));
                     if (Objects.equals(groupNo, matchedGroupNo)) {
                         return toBigDecimal(rawMap.get(valueKey));
@@ -510,7 +512,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
      * 删除前先执行治理预检查，避免已进入发布/追溯链路的规则被误删。
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int deleteRuleByIds(Long[] ruleIds) {
         if (ruleIds == null || ruleIds.length == 0) {
             return 0;
@@ -795,18 +797,20 @@ public class CostRuleServiceImpl implements ICostRuleService {
             throw new ServiceException("组合定价规则至少需要配置一个条件组合组");
         }
         Object rawGroupPrices = pricingConfig.get("groupPrices");
-        if (!(rawGroupPrices instanceof List<?> rawList) || rawList.isEmpty()) {
+        if (!(rawGroupPrices instanceof List) || ((List<?>) rawGroupPrices).isEmpty()) {
             throw new ServiceException("组合定价规则必须为每个组合组配置定价值");
         }
+        List<?> rawList = (List<?>) rawGroupPrices;
         Set<Integer> conditionGroups = new TreeSet<>();
         for (CostRuleCondition condition : conditions) {
             conditionGroups.add(condition.getGroupNo() == null ? 1 : condition.getGroupNo());
         }
         Set<Integer> configuredGroups = new TreeSet<>();
         for (Object item : rawList) {
-            if (!(item instanceof Map<?, ?> rawMap)) {
+            if (!(item instanceof Map)) {
                 continue;
             }
+            Map<?, ?> rawMap = (Map<?, ?>) item;
             Integer groupNo = toInteger(rawMap.get("groupNo"));
             if (groupNo == null) {
                 throw new ServiceException("组合定价存在未绑定组合组的定价项");
@@ -1105,8 +1109,8 @@ public class CostRuleServiceImpl implements ICostRuleService {
         if (value == null) {
             return false;
         }
-        if (value instanceof Boolean bool) {
-            return bool;
+        if (value instanceof Boolean) {
+            return (Boolean) value;
         }
         String normalized = String.valueOf(value);
         return "true".equalsIgnoreCase(normalized) || "1".equals(normalized);

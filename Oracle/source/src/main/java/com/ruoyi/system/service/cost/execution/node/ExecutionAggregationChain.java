@@ -9,7 +9,7 @@ public class ExecutionAggregationChain {
     private final List<ExecutionAggregationNode> nodes;
 
     public ExecutionAggregationChain(AmountTotalAggregationNode amountTotalAggregationNode) {
-        this.nodes = List.of(amountTotalAggregationNode);
+        this.nodes = java.util.Arrays.asList(amountTotalAggregationNode);
     }
 
     public void apply(ExecutionAggregationContext context) {

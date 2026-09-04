@@ -2,34 +2,43 @@
 
 接口字段、场景级调用、指定费目调用和 Java/cURL 示例见：[Mysql/API.md](API.md)。
 
+本分支推荐的同进程接入请先阅读：[EMBEDDED.md](EMBEDDED.md)。Java 8 + Spring Boot 2.7 Servlet 项目只添加 `com.costplatform.lite:cost-lite-starter-mysql`，计费入口和核心会自动注册到业务应用，不需要单独启动 Lite 服务。
+
 ## 1. 适用范围
 
-本目录适用于以下两种部署方式：
+本目录适用于以下两类数据库落位和两种运行方式：
 
 1. 独立 MySQL 库：轻量计费使用单独数据库，推荐用于标准交付。
 2. 业务 MySQL 库：把 `cost_*` 表初始化到业务库，适用于基础设施受限的项目。
+
+运行方式按宿主兼容性选择：
+
+1. 嵌入模式：`cost-lite-starter-mysql` 自动带入 `cost-lite-core-mysql`，在业务 JVM 内注册母体兼容 `/cost/**`。
+2. 独立服务模式：`cost-lite-server` 单独运行，旧版 HTTP Starter 负责代理，适用于 Java 8、Spring Boot 2、SSM 等项目。
 
 两种方式使用同一套表名和字段。区别只有 JDBC 地址，不需要修改计费实体或 Starter。
 
 ### 1.1 配置归属和组件职责
 
-数据库账号密码不打进 Jar，也不写入 Git。MySQL 运行 Jar 在启动时读取环境变量或 Jar 外部的 `application.yml`；Starter 不读取数据库配置，只负责在业务项目中提供 `/cost/**` 代理 Controller，并把请求转给 MySQL Jar。
+数据库账号密码不打进 Jar，也不写入 Git。嵌入模式由业务应用读取 `cost.lite.datasource.*` 并建立 Lite 独立连接池；独立服务模式则由 `cost-lite-server` 读取 `spring.datasource`。旧版 HTTP Starter 不读取数据库配置，只负责把请求转给独立 MySQL 服务。
 
 因此两种部署的配置边界如下：
 
 | 组件 | 配置内容 | 是否连接数据库 |
 | --- | --- | --- |
-| MySQL 运行 Jar | JDBC URL、数据库账号密码、运行端口、管理 Token | 是，连接专用库或业务库 |
-| 业务项目 Starter | MySQL Jar 地址、代理路径、超时、令牌 | 否 |
+| `cost-lite-starter-mysql` 嵌入入口 | `cost.lite.datasource.*`、宿主路径和权限配置 | 是，使用独立计费连接池 |
+| MySQL 独立服务 Jar | JDBC URL、数据库账号密码、运行端口、管理 Token | 是，连接专用库或业务库 |
+| 旧版 HTTP Starter | MySQL Jar 地址、代理路径、超时、令牌 | 否 |
 | `Front/` 工作台 | `/cost` 或 `/cost` 路由模式 | 否 |
 
-当前推荐的正式接入形态是“业务项目前端 + 业务项目 Starter + MySQL 运行 Jar”。运行 Jar 内置轻量 Controller、计费核心和 MySQL 方言适配；Starter 本身不是计费核心，也不把母体 Controller、Service、Mapper 复制进业务项目。仓库内的 `source/` 仅供我们维护核心和重新打包，客户迁移不需要复制。
+当前推荐的正式接入形态是“业务项目 + `cost-lite-starter-mysql` + 独立计费库”。`cost-lite-starter-mysql` 是入口，`cost-lite-core-mysql` 是随 Maven 传递引入的核心；两者均不需要单独启动。仓库内的 `source/` 仅供我们维护核心，客户迁移不需要复制。旧项目仍可使用“HTTP Starter + `cost-lite-server`”兼容方案。
 
 ## 2. 环境要求
 
-- 轻量计费运行 Jar：JDK 17。
+- 嵌入式 `cost-lite-starter-mysql`：Java 8、Spring Boot 2.7 Servlet 应用。
+- 独立 `cost-lite-server-mysql`：Java 8 运行环境即可。
 - 数据库：MySQL 8.0+，字符集 `utf8mb4`。
-- 宿主后端：Java 8+；Spring Boot 2.7 或 Spring Boot 3 均可。
+- 旧版 HTTP Starter 宿主：Java 8+；Spring Boot 2.7 或传统 SSM。
 - 宿主前端：Vue 3、Element Plus。前端接入见 `../Front/README.md`。
 
 ## 3. 初始化数据库
@@ -69,7 +78,7 @@ where table_schema = database()
 
 至少应包含场景、费目、要素、规则、发布、试算、任务、结果和追溯相关表。
 
-## 4. 启动计费运行 Jar
+## 4. 兼容模式：启动独立计费服务 Jar
 
 运行制品位于：
 
@@ -136,17 +145,17 @@ java -jar .\Mysql\runtime\cost-lite-server-1.0.0.jar `
 
 这里的“外部配置”是运行 Jar 所在部署单元的配置，不是把数据库账号交给前端。若 Jar 独立部署，它读取 Jar 进程的环境变量或配置文件；业务项目 Starter 只读取自己的 `base-url` 和令牌。
 
-### 4.4 在本仓库重新构建 MySQL Jar
+### 4.4 在本仓库重新构建 MySQL 制品
 
 只有修改计费核心、公式引擎或 MySQL 兼容逻辑时才执行本节。客户业务项目不要复制 `Mysql/source/`，仍然直接使用 `Mysql/runtime/` 中的已验证 Jar。
 
 ```bash
-mvn -f Mysql/source/pom.xml clean package -DskipTests
+mvn -f Mysql/pom.xml clean install -DskipTests
 ```
 
-完整回归通过后，把 `Mysql/source/target/cost-lite-server.jar` 发布为 `Mysql/runtime/cost-lite-server-1.0.0.jar`，再重新计算 `Mysql/runtime/SHA256SUMS`。`source/target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
+该命令生成 `cost-lite-core-mysql`、`cost-lite-starter-mysql`、嵌入示例和兼容 `cost-lite-server-mysql`。嵌入交付只发布前两个普通 Jar；需要独立部署时，再使用 `Mysql/server/target/cost-lite-server.jar` 更新运行制品。`target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
 
-## 5. 验证运行服务
+## 5. 验证独立运行服务
 
 ```bash
 curl http://127.0.0.1:18080/cost/lite/health
@@ -166,7 +175,21 @@ curl http://127.0.0.1:18080/cost/lite/health
 }
 ```
 
-## 6. 安装宿主 Starter
+## 6. 嵌入模式快速接入
+
+业务项目只需要声明一个依赖：
+
+```xml
+<dependency>
+    <groupId>com.costplatform.lite</groupId>
+    <artifactId>cost-lite-starter-mysql</artifactId>
+    <version>${cost-lite.version}</version>
+</dependency>
+```
+
+然后配置 `cost.lite.datasource.url`、`username` 和 `password`。Starter 会自动注册计费 Controller、Service、Mapper 和事务，业务项目自身的 `spring.datasource` 保持不变。完整配置、验证命令和兼容边界见 [EMBEDDED.md](EMBEDDED.md)。
+
+## 7. 兼容模式：安装 HTTP 宿主 Starter
 
 在仓库根目录执行：
 
@@ -174,9 +197,9 @@ curl http://127.0.0.1:18080/cost/lite/health
 mvn -f Mysql/backend-integration/pom.xml clean install
 ```
 
-Starter 和 Client 均以 Java 8 编译。Client 不依赖 Spring；Starter 同时兼容 Spring Boot 2.7 的 `spring.factories` 和 Spring Boot 3 的自动配置导入机制。
+Starter 和 Client 均以 Java 8 编译。Client 不依赖 Spring；HTTP Starter 适用于 Spring Boot 2.7 或传统 SSM。当前同进程 Starter 使用 Boot 2.7 的 `javax.*` 兼容线，不与 Boot 3 的 `jakarta.*` 依赖混用。
 
-## 7. 修改宿主 POM
+## 8. 修改宿主 POM
 
 ```xml
 <properties>
@@ -196,7 +219,7 @@ Starter 和 Client 均以 Java 8 编译。Client 不依赖 Spring；Starter 同�
 
 这里的 Starter 是宿主侧 HTTP 代理适配器，不是数据库运行 Jar。它不承载计费公式、规则匹配和结果落库逻辑；这些逻辑都在 `Mysql/runtime/cost-lite-server-1.0.0.jar` 中执行。
 
-## 8. 配置宿主后端
+## 9. 配置宿主后端
 
 把 `Mysql/config/host-application.yml` 中的内容合并到宿主配置：
 
@@ -224,7 +247,7 @@ curl http://127.0.0.1:8080/cost/health
 
 如果宿主经过网关统一增加服务前缀，例如 `/business`，浏览器访问路径通常是 `/business/cost/health`，但业务服务内部的 `web-path` 仍保持 `/cost`。
 
-## 9. 权限接入
+## 10. 权限接入
 
 Starter 只注册代理 Controller，不接管宿主鉴权。应由宿主安全框架保护 `/cost/**`：
 
@@ -233,7 +256,7 @@ Starter 只注册代理 Controller，不接管宿主鉴权。应由宿主安全�
 - `/cost/health` 可按项目要求放行或限制在内网。
 - 生产环境启用运行 Jar 管理 Token，并通过环境变量传给宿主。
 
-## 10. 字典差异处理
+## 11. 字典差异处理
 
 计费数据库始终保存母体统一编码。工作台通过 `/cost/dictionary/options` 读取轻量库的 `sys_dict_data`，中文名称和可选值由数据库维护。目标项目的字典名称或值需要变化时，直接修改对应字典数据，不需要改前端代码，也不需要接入宿主字典表。Jar 默认使用轻量库字典校验：
 
@@ -248,7 +271,7 @@ cost:
 
 其中 `SYSTEM` 指当前 Jar 连接的轻量库字典表，不是读取宿主数据库。只有确实要把宿主已有字典映射到计费统一编码时，才使用可选的 `CONFIG` 或 `CostDictionaryProvider` 扩展。
 
-## 11. 接入前端
+## 12. 接入前端
 
 按 `../Front/README.md` 把工作台加入宿主前端，并配置一个菜单：
 
@@ -258,7 +281,7 @@ cost:
 组件路径：项目内的 Cost Lite 页面包装组件
 ```
 
-### 11.1 使用宿主 Starter 代理
+### 12.1 使用宿主 Starter 代理
 
 这是推荐的企业项目接入方式。前端只调用稳定的 `/cost/**` 协议：
 
@@ -269,7 +292,7 @@ const costLiteApi = createCostLiteApi(
 );
 ```
 
-### 11.2 独立 Jar 直连
+### 12.2 独立 Jar 直连
 
 如果业务系统不引入 Starter，而是通过同源反向代理或网关把独立 Jar 暴露为 `/cost`，只需切换一处配置：
 
@@ -465,11 +488,11 @@ curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
 
 ## 22. 常见问题
 
-### 宿主启动后没有 `/cost/health`
+### 嵌入模式宿主启动后没有 `/cost/lite/health`
 
-检查 `cost.lite.integration.enabled=true`、Starter 是否进入运行时依赖，以及宿主组件扫描是否包含自动配置。
+检查是否引入 `com.costplatform.lite:cost-lite-starter-mysql`、`cost.lite.embedded.enabled` 是否为 `true`，以及 `cost.lite.datasource.*` 是否完整。嵌入模式不需要配置 `base-url`，也不需要启动 `cost-lite-server`。
 
-### 代理返回连接失败
+### 兼容模式代理返回连接失败
 
 从宿主服务所在机器访问 `COST_LITE_BASE_URL`，检查端口、防火墙、容器网络和上下文路径。
 

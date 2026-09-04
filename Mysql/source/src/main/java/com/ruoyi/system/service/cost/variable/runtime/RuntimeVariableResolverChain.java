@@ -19,7 +19,7 @@ public class RuntimeVariableResolverChain {
     }
 
     public RuntimeVariableResolverChain(RuntimeVariableResolver... resolvers) {
-        this.resolvers = resolvers == null ? new ArrayList<>() : new ArrayList<>(List.of(resolvers));
+        this.resolvers = resolvers == null ? new ArrayList<>() : new ArrayList<>(java.util.Arrays.asList(resolvers));
         AnnotationAwareOrderComparator.sort(this.resolvers);
     }
 

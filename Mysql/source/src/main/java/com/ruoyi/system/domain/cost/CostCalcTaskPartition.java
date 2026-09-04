@@ -6,7 +6,6 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.Date;
@@ -22,7 +21,6 @@ import java.util.Date;
 @Data
 @TableName("cost_calc_task_partition")
 public class CostCalcTaskPartition implements Serializable {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     /**

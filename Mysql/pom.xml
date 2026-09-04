@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.costplatform.lite</groupId>
+    <artifactId>cost-lite-mysql</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>cost-lite-mysql</name>
+    <description>MySQL 轻量计费核心、独立运行入口和嵌入式集成聚合工程</description>
+
+    <modules>
+        <module>source</module>
+        <module>starter</module>
+        <module>example</module>
+        <module>server</module>
+    </modules>
+</project>

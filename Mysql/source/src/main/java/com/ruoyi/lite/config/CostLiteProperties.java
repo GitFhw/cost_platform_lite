@@ -32,6 +32,9 @@ public class CostLiteProperties {
     /** 是否加载外部插件。 */
     private boolean pluginEnabled = true;
 
+    /** 嵌入式运行开关；Starter 默认在宿主进程内启用，独立服务显式关闭。 */
+    private Embedded embedded = new Embedded();
+
     /** 计费字典适配配置。 */
     private Dictionary dictionary = new Dictionary();
 
@@ -91,6 +94,14 @@ public class CostLiteProperties {
         this.pluginEnabled = pluginEnabled;
     }
 
+    public Embedded getEmbedded() {
+        return embedded;
+    }
+
+    public void setEmbedded(Embedded embedded) {
+        this.embedded = embedded == null ? new Embedded() : embedded;
+    }
+
     public Dictionary getDictionary() {
         return dictionary;
     }
@@ -100,11 +111,26 @@ public class CostLiteProperties {
     }
 
     /**
+     * 控制是否将计费能力注册到当前宿主 Spring 容器。
+     */
+    public static class Embedded {
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+    }
+
+    /**
      * 独立运行时字典配置。
      */
     public static class Dictionary {
         /** CONFIG 使用下方 values；SYSTEM 复用宿主系统字典；CUSTOM 由宿主提供 Bean。 */
-        private String provider = "CONFIG";
+        private String provider = "SYSTEM";
 
         /** 是否校验已配置字典类型的取值。 */
         private boolean validationEnabled = true;
@@ -222,21 +248,21 @@ public class CostLiteProperties {
 
         private static Map<String, List<String>> defaultValues() {
             Map<String, List<String>> defaults = new LinkedHashMap<>();
-            defaults.put("cost_business_domain", List.of("SALARY", "PORT", "STORAGE", "TRANSPORT", "MATERIAL", "MANUFACTURE"));
-            defaults.put("cost_scene_status", List.of("0", "1", "2"));
-            defaults.put("cost_scene_type", List.of("CONTRACT", "THEME", "PLAN", "COMPANY"));
-            defaults.put("cost_fee_status", List.of("0", "1"));
-            defaults.put("cost_unit_code", List.of("吨", "天", "次", "航次", "人", "箱", "元", "平方米*天"));
-            defaults.put("cost_variable_type", List.of("TEXT", "NUMBER", "DICT", "REMOTE", "FORMULA", "BOOLEAN", "DATE"));
-            defaults.put("cost_variable_source_type", List.of("INPUT", "DICT", "REMOTE", "FORMULA"));
-            defaults.put("cost_variable_data_type", List.of("STRING", "NUMBER", "BOOLEAN", "DATE", "JSON"));
-            defaults.put("cost_variable_status", List.of("0", "1"));
-            defaults.put("cost_variable_auth_type", List.of("NONE", "BASIC", "BEARER", "API_KEY"));
-            defaults.put("cost_variable_sync_mode", List.of("REALTIME", "NEAR_REALTIME", "SCHEDULED"));
-            defaults.put("cost_variable_cache_policy", List.of("NONE", "TTL", "MANUAL_REFRESH"));
-            defaults.put("cost_variable_fallback_policy", List.of("FAIL_FAST", "DEFAULT_VALUE", "LAST_SNAPSHOT"));
-            defaults.put("cost_formula_status", List.of("0", "1"));
-            defaults.put("cost_formula_return_type", List.of("NUMBER", "BOOLEAN", "STRING", "JSON"));
+            defaults.put("cost_business_domain", java.util.Arrays.asList("SALARY", "PORT", "STORAGE", "TRANSPORT", "MATERIAL", "MANUFACTURE"));
+            defaults.put("cost_scene_status", java.util.Arrays.asList("0", "1", "2"));
+            defaults.put("cost_scene_type", java.util.Arrays.asList("CONTRACT", "THEME", "PLAN", "COMPANY"));
+            defaults.put("cost_fee_status", java.util.Arrays.asList("0", "1"));
+            defaults.put("cost_unit_code", java.util.Arrays.asList("吨", "天", "次", "航次", "人", "箱", "元", "平方米*天"));
+            defaults.put("cost_variable_type", java.util.Arrays.asList("TEXT", "NUMBER", "DICT", "REMOTE", "FORMULA", "BOOLEAN", "DATE"));
+            defaults.put("cost_variable_source_type", java.util.Arrays.asList("INPUT", "DICT", "REMOTE", "FORMULA"));
+            defaults.put("cost_variable_data_type", java.util.Arrays.asList("STRING", "NUMBER", "BOOLEAN", "DATE", "JSON"));
+            defaults.put("cost_variable_status", java.util.Arrays.asList("0", "1"));
+            defaults.put("cost_variable_auth_type", java.util.Arrays.asList("NONE", "BASIC", "BEARER", "API_KEY"));
+            defaults.put("cost_variable_sync_mode", java.util.Arrays.asList("REALTIME", "NEAR_REALTIME", "SCHEDULED"));
+            defaults.put("cost_variable_cache_policy", java.util.Arrays.asList("NONE", "TTL", "MANUAL_REFRESH"));
+            defaults.put("cost_variable_fallback_policy", java.util.Arrays.asList("FAIL_FAST", "DEFAULT_VALUE", "LAST_SNAPSHOT"));
+            defaults.put("cost_formula_status", java.util.Arrays.asList("0", "1"));
+            defaults.put("cost_formula_return_type", java.util.Arrays.asList("NUMBER", "BOOLEAN", "STRING", "JSON"));
             return defaults;
         }
     }

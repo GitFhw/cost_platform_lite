@@ -1,6 +1,6 @@
 package com.ruoyi.system.domain.cost.bo;
 
-import jakarta.validation.constraints.NotBlank;
+import javax.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**

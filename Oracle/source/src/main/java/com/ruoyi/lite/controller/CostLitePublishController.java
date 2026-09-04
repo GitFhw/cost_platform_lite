@@ -8,7 +8,7 @@ import com.ruoyi.lite.web.CostLiteTableSupport;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
 import com.ruoyi.system.domain.cost.bo.CostPublishCreateBo;
 import com.ruoyi.system.service.cost.ICostPublishService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;

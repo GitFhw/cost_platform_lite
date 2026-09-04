@@ -54,12 +54,12 @@ public class CostVariableServiceImpl implements ICostVariableService {
     private static final String DICT_TYPE_SYNC_MODE = "cost_variable_sync_mode";
     private static final String DICT_TYPE_CACHE_POLICY = "cost_variable_cache_policy";
     private static final String DICT_TYPE_FALLBACK_POLICY = "cost_variable_fallback_policy";
-    private static final Set<String> SUPPORTED_REMOTE_METHODS = Set.of("GET", "POST", "PUT", "DELETE");
-    private static final Set<String> SUPPORTED_REMOTE_ADAPTERS = Set.of(
+    private static final Set<String> SUPPORTED_REMOTE_METHODS = new java.util.HashSet<>(java.util.Arrays.asList("GET", "POST", "PUT", "DELETE"));
+    private static final Set<String> SUPPORTED_REMOTE_ADAPTERS = new java.util.HashSet<>(java.util.Arrays.asList(
             RemoteVariableAccessPipeline.ADAPTER_STANDARD,
             RemoteVariableAccessPipeline.ADAPTER_ROOT_ARRAY,
             RemoteVariableAccessPipeline.ADAPTER_PAGE_ENVELOPE,
-            RemoteVariableAccessPipeline.ADAPTER_SINGLE_OBJECT);
+            RemoteVariableAccessPipeline.ADAPTER_SINGLE_OBJECT));
     private static final String REMOTE_TOKEN_PLACEHOLDER = "__PASTE_TOKEN_HERE__";
     private static final String REMOTE_SECRET_MASK = "******";
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -250,7 +250,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int deleteVariableByIds(Long[] variableIds) {
         if (variableIds == null || variableIds.length == 0) {
             return 0;
@@ -1183,32 +1183,34 @@ public class CostVariableServiceImpl implements ICostVariableService {
         }
         normalizeAuthConfig(normalizedAuthType, authConfig);
         switch (normalizedAuthType) {
-            case "BASIC" -> {
+            case "BASIC":
                 if (StringUtils.isEmpty(textValue(authConfig, "username"))) {
                     throw new ServiceException("Basic鉴权必须配置 username");
                 }
-            }
-            case "BEARER" -> {
+                break;
+            case "BEARER": {
                 String token = firstNonBlank(textValue(authConfig, "token"), textValue(authConfig, "accessToken"));
                 if (StringUtils.isEmpty(token) || REMOTE_TOKEN_PLACEHOLDER.equals(token)) {
                     throw new ServiceException("Bearer鉴权必须配置 token");
                 }
+                break;
             }
-            case "API_KEY" -> {
+            case "API_KEY":
                 if (StringUtils.isEmpty(textValue(authConfig, "keyValue"))) {
                     throw new ServiceException("API Key鉴权必须配置 keyValue");
                 }
-            }
-            case "COOKIE" -> {
+                break;
+            case "COOKIE": {
                 boolean hasRawCookie = StringUtils.isNotEmpty(firstNonBlank(textValue(authConfig, "rawCookie"), textValue(authConfig, "cookie")));
                 boolean hasCookiePair = StringUtils.isNotEmpty(textValue(authConfig, "cookieName"))
                         && StringUtils.isNotEmpty(textValue(authConfig, "cookieValue"));
                 if (!hasRawCookie && !hasCookiePair) {
                     throw new ServiceException("Cookie鉴权必须配置 rawCookie 或 cookieName/cookieValue");
                 }
+                break;
             }
-            default -> {
-            }
+            default:
+                break;
         }
     }
 

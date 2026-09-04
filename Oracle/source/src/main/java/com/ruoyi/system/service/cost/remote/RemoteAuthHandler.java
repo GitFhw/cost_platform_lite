@@ -35,30 +35,33 @@ public class RemoteAuthHandler {
             return;
         }
         switch (authType) {
-            case "BASIC" -> {
+            case "BASIC": {
                 String username = textValue(authConfig, "username");
                 String password = textValue(authConfig, "password");
                 if (StringUtils.isNotEmpty(username)) {
                     headers.setBasicAuth(StringUtils.defaultString(username), StringUtils.defaultString(password), StandardCharsets.UTF_8);
                 }
+                break;
             }
-            case "BEARER" -> {
+            case "BEARER": {
                 String headerName = firstNonBlank(textValue(authConfig, "headerName"), HttpHeaders.AUTHORIZATION);
                 String prefix = normalizeBearerPrefix(firstNonBlank(textValue(authConfig, "prefix"), "Bearer"));
                 String token = firstNonBlank(textValue(authConfig, "token"), textValue(authConfig, "accessToken"));
                 if (StringUtils.isNotEmpty(token)) {
                     headers.set(headerName, prefix + token);
                 }
+                break;
             }
-            case "API_KEY" -> {
+            case "API_KEY": {
                 String location = firstNonBlank(textValue(authConfig, "location"), "HEADER");
                 String keyName = firstNonBlank(textValue(authConfig, "keyName"), textValue(authConfig, "headerName"));
                 String keyValue = textValue(authConfig, "keyValue");
                 if ("HEADER".equalsIgnoreCase(location) && StringUtils.isNotEmpty(keyName) && StringUtils.isNotEmpty(keyValue)) {
                     headers.set(keyName, keyValue);
                 }
+                break;
             }
-            case "COOKIE" -> {
+            case "COOKIE": {
                 String rawCookie = firstNonBlank(textValue(authConfig, "rawCookie"), textValue(authConfig, "cookie"));
                 if (StringUtils.isNotEmpty(rawCookie)) {
                     headers.set(HttpHeaders.COOKIE, rawCookie);
@@ -69,9 +72,10 @@ public class RemoteAuthHandler {
                         headers.set(HttpHeaders.COOKIE, cookieName + "=" + cookieValue);
                     }
                 }
+                break;
             }
-            default -> {
-            }
+            default:
+                break;
         }
     }
 
@@ -96,17 +100,21 @@ public class RemoteAuthHandler {
         if (config.authConfig == null || config.authConfig.isNull()) {
             return false;
         }
-        return switch (config.authType) {
-            case "BEARER" ->
-                    StringUtils.isNotEmpty(firstNonBlank(textValue(config.authConfig, "token"), textValue(config.authConfig, "accessToken")));
-            case "BASIC" -> StringUtils.isNotEmpty(textValue(config.authConfig, "username"));
-            case "API_KEY" -> StringUtils.isNotEmpty(textValue(config.authConfig, "keyValue"));
-            case "COOKIE" ->
-                    StringUtils.isNotEmpty(firstNonBlank(textValue(config.authConfig, "rawCookie"), textValue(config.authConfig, "cookie")))
-                            || (StringUtils.isNotEmpty(textValue(config.authConfig, "cookieName"))
-                            && StringUtils.isNotEmpty(textValue(config.authConfig, "cookieValue")));
-            default -> false;
-        };
+        if ("BEARER".equals(config.authType)) {
+            return StringUtils.isNotEmpty(firstNonBlank(textValue(config.authConfig, "token"), textValue(config.authConfig, "accessToken")));
+        }
+        if ("BASIC".equals(config.authType)) {
+            return StringUtils.isNotEmpty(textValue(config.authConfig, "username"));
+        }
+        if ("API_KEY".equals(config.authType)) {
+            return StringUtils.isNotEmpty(textValue(config.authConfig, "keyValue"));
+        }
+        if ("COOKIE".equals(config.authType)) {
+            return StringUtils.isNotEmpty(firstNonBlank(textValue(config.authConfig, "rawCookie"), textValue(config.authConfig, "cookie")))
+                    || (StringUtils.isNotEmpty(textValue(config.authConfig, "cookieName"))
+                    && StringUtils.isNotEmpty(textValue(config.authConfig, "cookieValue")));
+        }
+        return false;
     }
 
     private String textValue(JsonNode objectNode, String fieldName) {

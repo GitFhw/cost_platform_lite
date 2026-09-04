@@ -4,7 +4,6 @@ import com.costplatform.lite.client.CostLiteAuth;
 import com.costplatform.lite.client.CostLiteClient;
 import com.costplatform.lite.client.CostLiteRequest;
 import com.costplatform.lite.client.CostLiteResponse;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -104,17 +103,17 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/scenes")
-    public Object createScene(@RequestBody(required = false) JsonNode body) {
+    public Object createScene(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.SCENE_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/scenes/copy")
-    public Object copyScene(@RequestBody(required = false) JsonNode body) {
+    public Object copyScene(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.SCENE_COPY, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PutMapping("/scenes")
-    public Object updateScene(@RequestBody(required = false) JsonNode body) {
+    public Object updateScene(@RequestBody(required = false) Object body) {
         return put(CostLiteRouteKeys.SCENE_UPDATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -153,12 +152,12 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/fees")
-    public Object createFee(@RequestBody(required = false) JsonNode body) {
+    public Object createFee(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.FEE_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PutMapping("/fees")
-    public Object updateFee(@RequestBody(required = false) JsonNode body) {
+    public Object updateFee(@RequestBody(required = false) Object body) {
         return put(CostLiteRouteKeys.FEE_UPDATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -203,27 +202,27 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/variables")
-    public Object createVariable(@RequestBody(required = false) JsonNode body) {
+    public Object createVariable(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.VARIABLE_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PutMapping("/variables")
-    public Object updateVariable(@RequestBody(required = false) JsonNode body) {
+    public Object updateVariable(@RequestBody(required = false) Object body) {
         return put(CostLiteRouteKeys.VARIABLE_UPDATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/variables/copy")
-    public Object copyVariable(@RequestBody(required = false) JsonNode body) {
+    public Object copyVariable(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.VARIABLE_COPY, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/variables/import-preview")
-    public Object previewVariableImport(@RequestBody(required = false) JsonNode body) {
+    public Object previewVariableImport(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.VARIABLE_IMPORT_PREVIEW, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/variables/import-data")
-    public Object importVariables(@RequestBody(required = false) JsonNode body) {
+    public Object importVariables(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.VARIABLE_IMPORT_DATA, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -251,12 +250,12 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/variable-groups")
-    public Object createVariableGroup(@RequestBody(required = false) JsonNode body) {
+    public Object createVariableGroup(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.VARIABLE_GROUP_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PutMapping("/variable-groups")
-    public Object updateVariableGroup(@RequestBody(required = false) JsonNode body) {
+    public Object updateVariableGroup(@RequestBody(required = false) Object body) {
         return put(CostLiteRouteKeys.VARIABLE_GROUP_UPDATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -289,27 +288,27 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/rules")
-    public Object createRule(@RequestBody(required = false) JsonNode body) {
+    public Object createRule(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.RULE_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PutMapping("/rules")
-    public Object updateRule(@RequestBody(required = false) JsonNode body) {
+    public Object updateRule(@RequestBody(required = false) Object body) {
         return put(CostLiteRouteKeys.RULE_UPDATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/rules/copy")
-    public Object copyRule(@RequestBody(required = false) JsonNode body) {
+    public Object copyRule(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.RULE_COPY, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/rules/tier-preview")
-    public Object previewRuleTier(@RequestBody(required = false) JsonNode body) {
+    public Object previewRuleTier(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.RULE_TIER_PREVIEW, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/rules/conflict-preview")
-    public Object previewRuleConflict(@RequestBody(required = false) JsonNode body) {
+    public Object previewRuleConflict(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.RULE_CONFLICT_PREVIEW, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -364,12 +363,12 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/formulas")
-    public Object createFormula(@RequestBody(required = false) JsonNode body) {
+    public Object createFormula(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.FORMULA_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PutMapping("/formulas")
-    public Object updateFormula(@RequestBody(required = false) JsonNode body) {
+    public Object updateFormula(@RequestBody(required = false) Object body) {
         return put(CostLiteRouteKeys.FORMULA_UPDATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -380,7 +379,7 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/formulas/test")
-    public Object testFormula(@RequestBody(required = false) JsonNode body) {
+    public Object testFormula(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.FORMULA_TEST, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -419,7 +418,7 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/versions")
-    public Object createVersion(@RequestBody(required = false) JsonNode body) {
+    public Object createVersion(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.PUBLISH_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -446,12 +445,12 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/simulations")
-    public Object executeSimulation(@RequestBody(required = false) JsonNode body) {
+    public Object executeSimulation(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.SIMULATION_EXECUTE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/simulations/batch")
-    public Object executeSimulationBatch(@RequestBody(required = false) JsonNode body) {
+    public Object executeSimulationBatch(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.SIMULATION_BATCH_EXECUTE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -462,7 +461,7 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/input-build/preview")
-    public Object previewInputBuild(@RequestBody(required = false) JsonNode body) {
+    public Object previewInputBuild(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.INPUT_BUILD_PREVIEW, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -482,17 +481,17 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/tasks/precheck")
-    public Object precheckTask(@RequestBody(required = false) JsonNode body) {
+    public Object precheckTask(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.TASK_PRECHECK, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/tasks")
-    public Object submitTask(@RequestBody(required = false) JsonNode body) {
+    public Object submitTask(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.TASK_SUBMIT, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PostMapping("/task-input-batches")
-    public Object createInputBatch(@RequestBody(required = false) JsonNode body) {
+    public Object createInputBatch(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.TASK_INPUT_BATCH_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -571,7 +570,7 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/calculate")
-    public Object calculate(@RequestBody(required = false) JsonNode body) {
+    public Object calculate(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.FEE_CALCULATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -617,12 +616,12 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/open/calculate")
-    public Object openCalculate(@RequestBody(required = false) JsonNode body) {
+    public Object openCalculate(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.OPEN_CALCULATE, body, CostLiteAuth.OPEN);
     }
 
     @PostMapping("/open/token")
-    public Object openToken(@RequestBody(required = false) JsonNode body) {
+    public Object openToken(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.OPEN_AUTH_TOKEN, body, CostLiteAuth.NONE);
     }
 
@@ -643,12 +642,12 @@ public class CostLiteProxyController {
     }
 
     @PostMapping("/open-apps")
-    public Object createOpenApp(@RequestBody(required = false) JsonNode body) {
+    public Object createOpenApp(@RequestBody(required = false) Object body) {
         return post(CostLiteRouteKeys.OPEN_APP_CREATE, body, CostLiteAuth.MANAGEMENT);
     }
 
     @PutMapping("/open-apps")
-    public Object updateOpenApp(@RequestBody(required = false) JsonNode body) {
+    public Object updateOpenApp(@RequestBody(required = false) Object body) {
         return put(CostLiteRouteKeys.OPEN_APP_UPDATE, body, CostLiteAuth.MANAGEMENT);
     }
 
@@ -675,7 +674,7 @@ public class CostLiteProxyController {
     }
 
     private Object post(String routeKey,
-                        JsonNode body,
+                        Object body,
                         CostLiteAuth auth,
                         Object... variables) {
         return invoke(CostLiteRequest.post(route(routeKey, variables))
@@ -685,7 +684,7 @@ public class CostLiteProxyController {
     }
 
     private Object put(String routeKey,
-                       JsonNode body,
+                       Object body,
                        CostLiteAuth auth,
                        Object... variables) {
         return invoke(CostLiteRequest.put(route(routeKey, variables))

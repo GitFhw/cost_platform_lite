@@ -18,25 +18,25 @@ public class CostLitePluginRegistry {
     private final Map<String, CostLitePlugin> plugins = new ConcurrentHashMap<>();
 
     public void register(CostLitePlugin plugin) {
-        if (plugin != null && plugin.getCode() != null && !plugin.getCode().isBlank()) {
+        if (plugin != null && plugin.getCode() != null && !plugin.getCode().trim().isEmpty()) {
             plugins.put(plugin.getCode(), plugin);
         }
     }
 
     public void register(InputAdapterPlugin plugin) {
-        if (plugin != null && plugin.getCode() != null && !plugin.getCode().isBlank()) {
+        if (plugin != null && plugin.getCode() != null && !plugin.getCode().trim().isEmpty()) {
             inputAdapters.put(plugin.getCode(), plugin);
         }
     }
 
     public void register(ResultAdapterPlugin plugin) {
-        if (plugin != null && plugin.getCode() != null && !plugin.getCode().isBlank()) {
+        if (plugin != null && plugin.getCode() != null && !plugin.getCode().trim().isEmpty()) {
             resultAdapters.put(plugin.getCode(), plugin);
         }
     }
 
     public void register(FormulaFunctionPlugin plugin) {
-        if (plugin != null && plugin.getName() != null && !plugin.getName().isBlank()) {
+        if (plugin != null && plugin.getName() != null && !plugin.getName().trim().isEmpty()) {
             formulaFunctions.put(plugin.getName(), plugin);
         }
     }

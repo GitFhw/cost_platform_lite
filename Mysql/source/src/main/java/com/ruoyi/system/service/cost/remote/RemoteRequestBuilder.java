@@ -34,7 +34,7 @@ public class RemoteRequestBuilder {
 
     public HttpHeaders buildHeaders(RemoteVariableConfig config) {
         HttpHeaders headers = new HttpHeaders();
-        headers.setAccept(List.of(MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN, MediaType.ALL));
+        headers.setAccept(java.util.Arrays.asList(MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN, MediaType.ALL));
         if (StringUtils.isNotEmpty(config.contentType)) {
             headers.setContentType(MediaType.parseMediaType(config.contentType));
         }

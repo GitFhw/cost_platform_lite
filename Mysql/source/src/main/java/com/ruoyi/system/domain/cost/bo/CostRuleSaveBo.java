@@ -2,9 +2,9 @@ package com.ruoyi.system.domain.cost.bo;
 
 import com.ruoyi.system.domain.cost.CostRuleCondition;
 import com.ruoyi.system.domain.cost.CostRuleTier;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import javax.validation.Valid;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.util.ArrayList;

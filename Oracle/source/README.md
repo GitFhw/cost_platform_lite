@@ -7,20 +7,20 @@
 - 轻量运行所需的通用兼容类和计费字典 Mapper；
 - Oracle 运行资源、Mapper XML 和 Oracle 方言拦截器。
 
-这里没有复制母体后台、用户权限、菜单、账单、定时任务、代码生成等无关模块。客户业务项目不需要复制本目录，客户只使用上级 `runtime/cost-lite-server-1.0.0.jar`；本目录用于我们后续维护核心并重新打包。
+这里没有复制母体后台、用户权限、菜单、账单、定时任务、代码生成等无关模块。客户业务项目不需要复制本目录；同进程项目由 `Oracle/starter/` 传递引用，独立部署项目使用上级 `runtime/cost-lite-server-1.0.0.jar`。本目录只用于我们后续维护核心并重新打包。
 
 ## 构建
 
-要求 JDK 17 和 Maven 3.9+，在仓库根目录执行：
+要求 Java 8（构建机可使用更高版本但目标字节码为 Java 8）和 Maven 3.9+，在仓库根目录执行：
 
 ```bash
-mvn -f Oracle/source/pom.xml clean package -DskipTests
+mvn -f Oracle/pom.xml clean install -DskipTests
 ```
 
 产物：
 
 ```text
-Oracle/source/target/cost-lite-server.jar
+Oracle/server/target/cost-lite-server.jar
 ```
 
 确认接口、数据库和前端回归通过后，再将产物复制到 `Oracle/runtime/cost-lite-server-1.0.0.jar` 并更新同目录 `SHA256SUMS`。`target/`、`.class` 和日志只允许出现在本机构建目录，禁止提交。

@@ -1,0 +1,54 @@
+{
+  "groups": [
+    {
+      "name": "cost.lite.embedded",
+      "type": "java.lang.Object",
+      "description": "是否在宿主 Spring Boot 进程内启用计费核心。Starter 默认启用。"
+    },
+    {
+      "name": "cost.lite.datasource",
+      "type": "com.zaxxer.hikari.HikariDataSource",
+      "description": "计费核心独立数据库连接。"
+    }
+  ],
+  "properties": [
+    {
+      "name": "cost.lite.embedded.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "是否在当前宿主进程内自动注册计费 Controller、Service、Mapper 和独立数据源。"
+    },
+    {
+      "name": "cost.lite.datasource.url",
+      "type": "java.lang.String",
+      "description": "计费数据库 JDBC URL。"
+    },
+    {
+      "name": "cost.lite.datasource.username",
+      "type": "java.lang.String",
+      "description": "计费数据库用户名。"
+    },
+    {
+      "name": "cost.lite.datasource.password",
+      "type": "java.lang.String",
+      "description": "计费数据库密码。建议通过环境变量或配置中心提供。"
+    },
+    {
+      "name": "cost.lite.datasource.driver-class-name",
+      "type": "java.lang.String",
+      "description": "计费数据库 JDBC 驱动类名。"
+    },
+    {
+      "name": "cost.lite.datasource.hikari.pool-name",
+      "type": "java.lang.String",
+      "defaultValue": "cost-lite-pool",
+      "description": "计费独立连接池名称。"
+    },
+    {
+      "name": "cost.lite.datasource.hikari.maximum-pool-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 10,
+      "description": "计费独立连接池最大连接数。"
+    }
+  ]
+}

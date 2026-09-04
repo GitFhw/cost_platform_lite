@@ -346,7 +346,7 @@ public class CostOpenAppServiceImpl implements ICostOpenAppService {
             return sceneIds == null ? Collections.emptyList() : sceneIds.stream()
                     .filter(id -> id != null && id > 0)
                     .distinct()
-                    .toList();
+                    .collect(java.util.stream.Collectors.toList());
         } catch (Exception e) {
             throw new ServiceException("开放应用场景权限配置格式不正确，请联系平台管理员修复", HttpStatus.FORBIDDEN);
         }
@@ -359,7 +359,7 @@ public class CostOpenAppServiceImpl implements ICostOpenAppService {
         List<Long> normalizedSceneIds = sceneIds == null ? Collections.emptyList() : sceneIds.stream()
                 .filter(id -> id != null && id > 0)
                 .distinct()
-                .toList();
+                .collect(java.util.stream.Collectors.toList());
         try {
             return objectMapper.writeValueAsString(normalizedSceneIds);
         } catch (Exception e) {

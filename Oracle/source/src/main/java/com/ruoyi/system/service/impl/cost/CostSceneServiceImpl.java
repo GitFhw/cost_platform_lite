@@ -197,7 +197,7 @@ public class CostSceneServiceImpl implements ICostSceneService {
      * <p>复制仅覆盖配置主数据，不复制发布版本、核算任务和结果台账，避免新场景继承运行态数据。</p>
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public CostScene copyScene(CostSceneCopyBo request) {
         if (request == null || request.getSourceSceneId() == null) {
             throw new ServiceException("来源场景不能为空");
@@ -474,7 +474,7 @@ public class CostSceneServiceImpl implements ICostSceneService {
      * @return 结果
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int deleteSceneByIds(Long[] sceneIds) {
         for (Long sceneId : sceneIds) {
             CostSceneGovernanceCheckVo check = selectSceneGovernanceCheck(sceneId);

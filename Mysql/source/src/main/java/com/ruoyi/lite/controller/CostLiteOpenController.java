@@ -16,8 +16,8 @@ import com.ruoyi.system.service.cost.ICostOpenAppService;
 import com.ruoyi.system.service.cost.ICostOpenTokenService;
 import com.ruoyi.system.service.cost.ICostRunService;
 import com.ruoyi.system.service.cost.ICostSceneService;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
+import javax.servlet.http.HttpServletRequest;
+import javax.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -172,12 +172,12 @@ public class CostLiteOpenController {
     }
 
     private List<Long> parseIds(String text) {
-        if (text == null || text.isBlank()) {
+        if (text == null || text.trim().isEmpty()) {
             return Collections.emptyList();
         }
         List<Long> ids = new ArrayList<>();
         for (String item : text.split(",")) {
-            if (item != null && !item.isBlank()) {
+            if (item != null && !item.trim().isEmpty()) {
                 try {
                     ids.add(Long.valueOf(item.trim()));
                 } catch (NumberFormatException exception) {

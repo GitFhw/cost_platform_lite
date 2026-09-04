@@ -7,7 +7,6 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.ruoyi.common.annotation.Excel;
 import lombok.Data;
 
-import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.Date;
@@ -22,7 +21,6 @@ import java.util.Date;
 @Data
 @TableName("cost_result_ledger")
 public class CostResultLedger implements Serializable {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     /**

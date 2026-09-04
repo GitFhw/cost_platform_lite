@@ -36,7 +36,7 @@ public class CostLiteBillingLogWriter {
         this.objectMapper = objectMapper;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(transactionManager = "costLiteTransactionManager", propagation = Propagation.REQUIRES_NEW)
     public CostSimulationRecord writeSuccess(CostFeeCalculateBo request, Map<String, Object> result) {
         if (!properties.isPersistBillingLog()) {
             return null;
@@ -51,7 +51,7 @@ public class CostLiteBillingLogWriter {
         return record;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(transactionManager = "costLiteTransactionManager", propagation = Propagation.REQUIRES_NEW)
     public CostSimulationRecord writeFailure(CostFeeCalculateBo request, Throwable throwable) {
         if (!properties.isPersistBillingLog()) {
             return null;

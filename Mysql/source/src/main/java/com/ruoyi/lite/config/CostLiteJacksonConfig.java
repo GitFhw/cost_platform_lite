@@ -1,5 +1,6 @@
 package com.ruoyi.lite.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 public class CostLiteJacksonConfig {
     @Bean
+    @ConditionalOnMissingBean(name = "costLiteSafeLongSerialization")
     public Jackson2ObjectMapperBuilderCustomizer costLiteSafeLongSerialization() {
         return builder -> builder
                 .serializerByType(Long.class, CostLiteSafeLongSerializer.INSTANCE)

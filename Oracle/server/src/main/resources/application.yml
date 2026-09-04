@@ -4,8 +4,8 @@ spring:
   main:
     banner-mode: "off"
   datasource:
-    driver-class-name: ${COST_LITE_DB_DRIVER:com.mysql.cj.jdbc.Driver}
-    url: ${COST_LITE_DB_URL:jdbc:mysql://127.0.0.1:3306/cost_platform_lite?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
+    url: ${COST_LITE_DB_URL:jdbc:oracle:thin:@127.0.0.1:1521/FREEPDB1}
     username: ${COST_LITE_DB_USERNAME:root}
     password: ${COST_LITE_DB_PASSWORD:}
     hikari:
@@ -36,7 +36,7 @@ server:
       min-spare: ${COST_LITE_TOMCAT_MIN_THREADS:10}
 
 mybatis-plus:
-  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  mapper-locations: classpath*:cost-lite/mapper/**/*Mapper.xml
   type-aliases-package: com.ruoyi.system.domain,com.ruoyi.common.core.domain
 
 cost:
@@ -46,6 +46,8 @@ cost:
     stale-timeout-seconds: ${COST_LITE_DISPATCH_STALE_TIMEOUT_SECONDS:600}
     node-id: ${COST_LITE_NODE_ID:cost-lite-single}
   lite:
+    embedded:
+      enabled: false
     auth-enabled: ${COST_LITE_AUTH_ENABLED:false}
     admin-token: ${COST_LITE_ADMIN_TOKEN:}
     operator: ${COST_LITE_OPERATOR:lite-admin}
@@ -54,7 +56,7 @@ cost:
     plugin-enabled: ${COST_LITE_PLUGIN_ENABLED:true}
     plugin-dir: ${COST_LITE_PLUGIN_DIR:plugins}
     dictionary:
-      provider: ${COST_LITE_DICTIONARY_PROVIDER:CONFIG}
+      provider: ${COST_LITE_DICTIONARY_PROVIDER:SYSTEM}
       validation-enabled: ${COST_LITE_DICTIONARY_VALIDATION_ENABLED:true}
       allow-unconfigured-types: ${COST_LITE_DICTIONARY_ALLOW_UNCONFIGURED_TYPES:true}
       # 字典编码不一致时只需在外部 application.yml 覆盖下面两个映射。
@@ -69,13 +71,14 @@ logging:
     org.springframework.jdbc: WARN
     org.mybatis: WARN
 
+
 ---
 spring:
   config:
     activate:
-      on-profile: mysql
+      on-profile: oracle
   datasource:
-    driver-class-name: ${COST_LITE_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+    driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
     url: ${COST_LITE_DB_URL}
     username: ${COST_LITE_DB_USERNAME}
     password: ${COST_LITE_DB_PASSWORD}

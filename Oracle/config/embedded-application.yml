@@ -1,0 +1,33 @@
+# 业务项目嵌入 cost-lite-starter-oracle 的配置模板。
+# 数据库密码请使用环境变量或配置中心提供，不要把真实值提交到 Git。
+cost:
+  lite:
+    embedded:
+      enabled: true
+    auth-enabled: ${COST_LITE_AUTH_ENABLED:false}
+    admin-token: ${COST_LITE_ADMIN_TOKEN:}
+    operator: ${COST_LITE_OPERATOR:lite-admin}
+    persist-billing-log: ${COST_LITE_PERSIST_BILLING_LOG:true}
+    plugin-enabled: ${COST_LITE_PLUGIN_ENABLED:true}
+    dictionary:
+      provider: ${COST_LITE_DICTIONARY_PROVIDER:SYSTEM}
+      validation-enabled: ${COST_LITE_DICTIONARY_VALIDATION_ENABLED:true}
+      allow-unconfigured-types: ${COST_LITE_DICTIONARY_ALLOW_UNCONFIGURED_TYPES:true}
+    datasource:
+      driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
+      url: ${COST_LITE_DB_URL:jdbc:oracle:thin:@//127.0.0.1:1521/FREEPDB1}
+      username: ${COST_LITE_DB_USERNAME:}
+      password: ${COST_LITE_DB_PASSWORD:}
+      hikari:
+        pool-name: cost-lite-oracle-pool
+        minimum-idle: ${COST_LITE_DB_MIN_IDLE:1}
+        maximum-pool-size: ${COST_LITE_DB_MAX_POOL_SIZE:10}
+        connection-timeout: ${COST_LITE_DB_CONNECTION_TIMEOUT:5000}
+        validation-timeout: 3000
+        initialization-fail-timeout: -1
+
+  dispatch:
+    enabled: ${COST_LITE_DISPATCH_ENABLED:false}
+    dispatch-interval-seconds: ${COST_LITE_DISPATCH_INTERVAL_SECONDS:15}
+    stale-timeout-seconds: ${COST_LITE_DISPATCH_STALE_TIMEOUT_SECONDS:600}
+    node-id: ${COST_LITE_NODE_ID:cost-lite-embedded}
