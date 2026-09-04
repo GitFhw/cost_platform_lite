@@ -8,7 +8,7 @@ import com.ruoyi.lite.web.CostLiteTableSupport;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.bo.CostSceneCopyBo;
 import com.ruoyi.system.service.cost.ICostSceneService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

@@ -309,7 +309,7 @@ public class CostPublishServiceImpl implements ICostPublishService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int publishScene(CostPublishCreateBo bo) {
         return distributedLockSupport.executeSceneVersioningLock(bo.getSceneId(),
                 "当前场景正在执行发布/生效/回滚，请稍后重试", () ->
@@ -364,7 +364,7 @@ public class CostPublishServiceImpl implements ICostPublishService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int activateVersion(Long versionId) {
         CostPublishVersion version = requireVersion(versionId);
         return distributedLockSupport.executeSceneVersioningLock(version.getSceneId(),
@@ -376,7 +376,7 @@ public class CostPublishServiceImpl implements ICostPublishService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int rollbackVersion(Long versionId) {
         CostPublishVersion version = requireVersion(versionId);
         return distributedLockSupport.executeSceneVersioningLock(version.getSceneId(),

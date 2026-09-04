@@ -10,7 +10,7 @@ import java.util.List;
  * 轻量运行时配置字典适配器。
  */
 @Component
-@ConditionalOnProperty(prefix = "cost.lite.dictionary", name = "provider", havingValue = "CONFIG", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "cost.lite.dictionary", name = "provider", havingValue = "CONFIG")
 public class CostLiteConfigDictionaryProvider implements CostDictionaryProvider {
     private final CostLiteProperties properties;
 

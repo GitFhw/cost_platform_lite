@@ -11,7 +11,7 @@ public class PricingNodeChain {
     public PricingNodeChain(QuantityNode quantityNode,
                             UnitPriceNode unitPriceNode,
                             AmountNode amountNode) {
-        this.nodes = List.of(quantityNode, unitPriceNode, amountNode);
+        this.nodes = java.util.Arrays.asList(quantityNode, unitPriceNode, amountNode);
     }
 
     public void apply(PricingContext context, PricingSupport support) {

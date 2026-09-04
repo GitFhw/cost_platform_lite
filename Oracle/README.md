@@ -2,7 +2,7 @@
 
 接口字段、场景级调用、指定费目调用和 Java/cURL 示例见：[Oracle/API.md](API.md)。
 
-本目录是可直接交付给第三方业务系统的 Oracle 集成包。运行端以独立 Jar 交付，宿主系统可选择通过 HTTP 直连 Jar，或引入 `cost-lite-spring-boot-starter` 暴露同源代理。`source/` 保存本仓库维护用的 Oracle 计费核心源码；客户迁移只使用 Jar、Starter、前端、配置和 SQL，不需要复制源码。
+本目录是可直接交付给第三方业务系统的 Oracle 集成包。Java 8 + Spring Boot 2.7 Servlet 项目推荐引入 `cost-lite-starter-oracle` 同进程接入；传统 SSM 或需要进程隔离的项目可使用独立 Jar + HTTP 代理。`source/` 保存本仓库维护用的 Oracle 计费核心源码；客户迁移只使用 Starter/Jar、前端、配置和 SQL，不需要复制源码。同进程说明见 [EMBEDDED.md](EMBEDDED.md)。
 
 ## 1. 交付内容
 
@@ -15,11 +15,15 @@ Oracle/
 ├─ backend-integration/
 │  ├─ cost-lite-client/                 Java 8 兼容 HTTP Client
 │  └─ cost-lite-spring-boot-starter/    可选 Spring Boot 代理 Starter
+├─ starter/                              Java 8 + Spring Boot 2.7 同进程 Starter
+├─ example/                              同进程集成验证宿主
+├─ server/                               独立 Oracle 服务入口
 ├─ bin/
 │  ├─ start-cost-lite.ps1              Windows 启动脚本
 │  └─ start-cost-lite.sh                Linux 启动脚本
 ├─ config/
 │  ├─ application-oracle.yml            Jar 运行配置样例
+│  ├─ embedded-application.yml          同进程 Starter 宿主配置样例
 │  ├─ host-application.yml              宿主系统配置样例
 │  └─ runtime.env.example                环境变量样例
 ├─ runtime/
@@ -34,9 +38,9 @@ Jar 加密暂未纳入本版本。后续如需授权控制，可在不改变宿�
 
 ## 2. 环境要求
 
-- 运行 Jar：JDK 17。
+- 运行 Jar：Java 8 及以上。
 - Oracle：12c 或更高版本，推荐 19c、21c 或 23ai；数据库用户需要 `CREATE SESSION`、建表权限和对应表空间配额。
-- 宿主后端：Java 8 及以上；Starter 可用于 Spring Boot 2.7 或 Spring Boot 3。
+- 同进程宿主：Java 8 + Spring Boot 2.7 Servlet 应用；传统 SSM 或其他版本使用 HTTP 代理方式。
 - 宿主前端：Vue 3、Element Plus。前端工作台接入方式见 `../Front/README.md`。
 
 Oracle 使用 Service Name 连接时，URL 采用：
@@ -145,13 +149,13 @@ bash Oracle/bin/start-cost-lite.sh
 
 ### 4.4 在本仓库重新构建 Oracle Jar
 
-只有修改计费核心、公式引擎或 Oracle 方言兼容逻辑时才执行本节。客户业务项目不要复制 `Oracle/source/`，仍然直接使用 `Oracle/runtime/` 中的已验证 Jar。
+只有修改计费核心、公式引擎或 Oracle 方言兼容逻辑时才执行本节。客户业务项目不要复制 `Oracle/source/`，同进程项目引用 `cost-lite-starter-oracle`，独立部署项目使用 `Oracle/runtime/` 中的已验证 Jar。
 
 ```bash
-mvn -f Oracle/source/pom.xml clean package -DskipTests
+mvn -f Oracle/pom.xml clean install -DskipTests
 ```
 
-完整回归通过后，把 `Oracle/source/target/cost-lite-server.jar` 发布为 `Oracle/runtime/cost-lite-server-1.0.0.jar`，再重新计算 `Oracle/runtime/SHA256SUMS`。`source/target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
+完整回归通过后，把 `Oracle/server/target/cost-lite-server.jar` 发布为 `Oracle/runtime/cost-lite-server-1.0.0.jar`，再重新计算 `Oracle/runtime/SHA256SUMS`。`target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
 
 ## 5. 验证运行服务
 
@@ -180,11 +184,25 @@ curl http://127.0.0.1:18082/cost/lite/bootstrap
 
 ## 6. 宿主后端接入方式
 
-### 6.1 独立 Jar + HTTP
+### 6.1 同进程 Starter
 
-业务系统不需要复制母体 Controller、Service、Mapper 或实体，只需通过网关或同源反向代理访问 Jar 的 `/cost/**` 路由。前端适配器使用 `routeMode: runtime`。
+Java 8 + Spring Boot 2.7 Servlet 项目推荐依赖 `com.costplatform.lite:cost-lite-starter-oracle`。它会自动注册计费入口并使用 `cost.lite.datasource.*` 建立命名的 Oracle 计费数据源，不启动独立 Jar。完整配置见 [EMBEDDED.md](EMBEDDED.md)。
 
-### 6.2 Spring Boot Starter 代理
+```xml
+<dependency>
+    <groupId>com.costplatform.lite</groupId>
+    <artifactId>cost-lite-starter-oracle</artifactId>
+    <version>${cost-lite.version}</version>
+</dependency>
+```
+
+嵌入模式前端调用母体兼容路径，使用 `routeMode: "runtime"`；宿主继续负责登录、菜单、权限和 CORS。
+
+### 6.2 独立 Jar + HTTP
+
+业务系统不需要复制母体 Controller、Service、Mapper 或实体，只需通过网关或同源反向代理访问 Jar 的 `/cost/**` 路由。前端适配器使用 `routeMode: "runtime"`。
+
+### 6.3 Spring Boot Starter 代理
 
 在 `Oracle/backend-integration` 目录构建：
 
@@ -235,7 +253,7 @@ curl http://127.0.0.1:8080/cost/health
 
 ## 7. 前端接入
 
-将 `../Front/src/CostLiteWorkbench.vue` 复制或作为组件依赖引入，在宿主路由增加一个菜单即可。推荐的代理模式：
+将 `../Front/src/CostLiteWorkbench.vue` 复制或作为组件依赖引入，在宿主路由增加一个菜单即可。HTTP 代理模式：
 
 ```ts
 const costLiteApi = createCostLiteApi(

@@ -7,6 +7,8 @@ import org.apache.ibatis.type.JdbcType;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -25,29 +27,32 @@ import javax.sql.DataSource;
  * 不复制母体实体和表模型。</p>
  */
 @Configuration
-@MapperScan("com.ruoyi.system.mapper")
+@ConditionalOnProperty(prefix = "cost.lite.embedded", name = "enabled", havingValue = "false")
+@MapperScan(basePackages = "com.ruoyi.system.mapper", sqlSessionFactoryRef = "costLiteSqlSessionFactory")
 public class CostLitePersistenceConfig {
-    @Bean
+    @Bean(name = "costLiteDataSourceProperties")
     @Primary
     @ConfigurationProperties("spring.datasource")
-    public DataSourceProperties liteDataSourceProperties() {
+    public DataSourceProperties costLiteDataSourceProperties() {
         return new DataSourceProperties();
     }
 
-    @Bean
+    @Bean(name = "costLiteDataSource")
     @Primary
     @ConfigurationProperties("spring.datasource.hikari")
-    public DataSource liteDataSource(DataSourceProperties liteDataSourceProperties) {
-        return liteDataSourceProperties.initializeDataSourceBuilder().build();
+    public DataSource costLiteDataSource(
+            @Qualifier("costLiteDataSourceProperties") DataSourceProperties costLiteDataSourceProperties) {
+        return costLiteDataSourceProperties.initializeDataSourceBuilder().build();
     }
 
-    @Bean
-    public SqlSessionFactory sqlSessionFactory(DataSource liteDataSource) throws Exception {
+    @Bean(name = "costLiteSqlSessionFactory")
+    public SqlSessionFactory costLiteSqlSessionFactory(
+            @Qualifier("costLiteDataSource") DataSource costLiteDataSource) throws Exception {
         MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
-        factory.setDataSource(liteDataSource);
+        factory.setDataSource(costLiteDataSource);
         factory.setTypeAliasesPackage("com.ruoyi.system.domain,com.ruoyi.common.core.domain");
         Resource[] mapperResources = new PathMatchingResourcePatternResolver()
-                .getResources("classpath*:mapper/**/*Mapper.xml");
+                .getResources("classpath*:cost-lite/mapper/**/*Mapper.xml");
         factory.setMapperLocations(mapperResources);
 
         MybatisConfiguration configuration = new MybatisConfiguration();
@@ -59,13 +64,15 @@ public class CostLitePersistenceConfig {
         return factory.getObject();
     }
 
-    @Bean
-    public PlatformTransactionManager transactionManager(DataSource liteDataSource) {
-        return new DataSourceTransactionManager(liteDataSource);
+    @Bean(name = "costLiteTransactionManager")
+    public PlatformTransactionManager costLiteTransactionManager(
+            @Qualifier("costLiteDataSource") DataSource costLiteDataSource) {
+        return new DataSourceTransactionManager(costLiteDataSource);
     }
 
-    @Bean
-    public TransactionTemplate transactionTemplate(PlatformTransactionManager transactionManager) {
-        return new TransactionTemplate(transactionManager);
+    @Bean(name = "costLiteTransactionTemplate")
+    public TransactionTemplate costLiteTransactionTemplate(
+            @Qualifier("costLiteTransactionManager") PlatformTransactionManager costLiteTransactionManager) {
+        return new TransactionTemplate(costLiteTransactionManager);
     }
 }

@@ -1,5 +1,6 @@
 package com.ruoyi.lite.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,7 @@ import java.time.Duration;
 @Configuration
 public class CostLiteHttpConfig {
     @Bean(name = "costAccessRestTemplate")
+    @ConditionalOnMissingBean(name = "costAccessRestTemplate")
     public RestTemplate costAccessRestTemplate(RestTemplateBuilder builder) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(5000);

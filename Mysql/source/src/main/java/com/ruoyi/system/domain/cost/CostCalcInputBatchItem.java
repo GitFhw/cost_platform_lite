@@ -6,7 +6,6 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.io.Serial;
 import java.io.Serializable;
 import java.util.Date;
 
@@ -18,7 +17,6 @@ import java.util.Date;
 @Data
 @TableName("cost_calc_input_batch_item")
 public class CostCalcInputBatchItem implements Serializable {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     @TableId(value = "item_id", type = IdType.AUTO)

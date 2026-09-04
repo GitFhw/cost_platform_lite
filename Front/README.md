@@ -21,8 +21,8 @@ Jar 连接目标库中按 `Mysql/sql/cost-lite-schema.sql` 或 `Oracle/sql/cost-
 
 后端支持两种等价部署入口，前端代码只切换一次路由模式：
 
-- `proxy`：宿主引入 Spring Boot Starter，前端调用稳定的 `/cost/**` 协议。
-- `runtime`：前端直接调用独立 Jar 暴露的母体兼容路径，前端业务组件不变。
+- `runtime`：宿主引入同进程 `cost-lite-starter-mysql`/`cost-lite-starter-oracle`，或前端直连独立 Jar，调用母体兼容路径。
+- `proxy`：旧版 HTTP Starter 在宿主暴露稳定代理路径，前端调用代理协议；Jar 地址和令牌只留在服务端。
 
 Oracle 和 MySQL 的差异只在后端运行 Jar 与初始化 SQL；两套 Jar 都提供相同的工作台接口语义，业务项目不需要为数据库类型复制一套页面。
 
@@ -60,7 +60,7 @@ import {
 
 const costLiteApi = createCostLiteApi(
   (config) => request(config),
-  { basePath: "/cost" },
+  { basePath: "/cost", routeMode: "runtime" },
 );
 </script>
 
@@ -68,6 +68,8 @@ const costLiteApi = createCostLiteApi(
   <CostLiteWorkbench :api="costLiteApi" />
 </template>
 ```
+
+上面的 `runtime` 配置适用于同进程 Starter。若宿主使用 `backend-integration` 的 HTTP 代理，改成 `routeMode: "proxy"`。
 
 如果目标项目需要调整中文名称或可选值，直接修改目标轻量库中的对应字典数据即可，工作台刷新后自动生效：
 
@@ -95,14 +97,14 @@ const costLiteApi = createCostLiteApi(
 
 | 路由模式 | 部署方式 | `basePath` 示例 |
 | --- | --- | --- |
-| `proxy` | 浏览器直连业务服务 | `/cost` |
+| `runtime` | 同进程 Starter 或独立 Jar | `/cost` |
+| `proxy` | HTTP Starter 宿主服务 | `/cost` |
 | `proxy` | 网关按服务名转发 | `/business/cost` |
 | `proxy` | 网关统一 API 前缀 | `/api/business/cost` |
-| `runtime` | 独立 Jar 直连或由网关转发 | `/cost` |
 
 `basePath` 始终填写浏览器实际访问的路径，不填写 `http://host:port` 形式的 Jar 地址。独立 Jar 的真实路由由 `runtime` 模式集中转换，调用方不用手工维护场景、费目、要素、规则等接口地址。
 
-如果独立 Jar 被网关挂在 `/business/cost`，仍然只改 `basePath`：
+如果独立 Jar 或同进程 Starter 被网关挂在 `/business/cost`，仍然只改 `basePath`：
 
 ```ts
 {
@@ -141,7 +143,7 @@ interface CostLiteRequest {
 
 ## 8. 权限
 
-前端菜单权限只控制入口展示，后端必须继续保护 Starter 的 `/cost/**` 或独立 Jar 的 `/cost/**` 管理路径。
+前端菜单权限只控制入口展示，后端必须继续保护同进程 Starter 或独立 Jar 的 `/cost/**` 管理路径；HTTP 代理还要保护代理入口。
 
 推荐最小角色：
 

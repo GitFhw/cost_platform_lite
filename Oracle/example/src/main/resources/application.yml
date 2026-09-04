@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: cost-lite-embedded-example
+  main:
+    banner-mode: "off"
+  datasource:
+    driver-class-name: ${COST_LITE_HOST_DB_DRIVER:oracle.jdbc.OracleDriver}
+    url: ${COST_LITE_HOST_DB_URL:jdbc:oracle:thin:@127.0.0.1:1522/FREEPDB1}
+    username: ${COST_LITE_HOST_DB_USERNAME:root}
+    password: ${COST_LITE_HOST_DB_PASSWORD:}
+
+server:
+  port: ${COST_LITE_EXAMPLE_PORT:18081}
+  shutdown: graceful
+
+cost:
+  dispatch:
+    enabled: false
+  lite:
+    embedded:
+      enabled: true
+    auth-enabled: false
+    operator: ${COST_LITE_OPERATOR:lite-example}
+    persist-billing-log: true
+    plugin-enabled: false
+    dictionary:
+      provider: ${COST_LITE_DICTIONARY_PROVIDER:SYSTEM}
+      validation-enabled: ${COST_LITE_DICTIONARY_VALIDATION_ENABLED:true}
+      allow-unconfigured-types: ${COST_LITE_DICTIONARY_ALLOW_UNCONFIGURED_TYPES:true}
+    datasource:
+      driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
+      url: ${COST_LITE_DB_URL:jdbc:oracle:thin:@127.0.0.1:1522/FREEPDB1}
+      username: ${COST_LITE_DB_USERNAME:root}
+      password: ${COST_LITE_DB_PASSWORD:}
+      hikari:
+        pool-name: cost-lite-embedded-example-pool
+        minimum-idle: 1
+        maximum-pool-size: 5
+        connection-timeout: 5000
+        validation-timeout: 3000
+        initialization-fail-timeout: -1
+
+logging:
+  level:
+    root: INFO
+    com.costplatform.lite: INFO
+    com.ruoyi.lite: INFO
+    com.ruoyi.system.service.impl.cost: INFO
+    org.springframework.jdbc: WARN
+    org.mybatis: WARN

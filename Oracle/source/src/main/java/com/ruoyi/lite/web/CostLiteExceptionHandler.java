@@ -4,7 +4,7 @@ import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.lite.service.CostLiteBillingException;
-import jakarta.validation.ConstraintViolationException;
+import javax.validation.ConstraintViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 /**
  * 轻量接口统一错误响应。
  */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.ruoyi.lite.controller")
 public class CostLiteExceptionHandler {
     @ExceptionHandler(CostLiteBillingException.class)
     public AjaxResult handleBilling(CostLiteBillingException exception) {
@@ -55,6 +55,6 @@ public class CostLiteExceptionHandler {
     }
 
     private String safeMessage(String message, String fallback) {
-        return message == null || message.isBlank() ? fallback : message;
+        return message == null || message.trim().isEmpty() ? fallback : message;
     }
 }

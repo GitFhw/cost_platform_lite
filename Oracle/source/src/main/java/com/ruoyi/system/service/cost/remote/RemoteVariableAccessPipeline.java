@@ -33,10 +33,10 @@ public class RemoteVariableAccessPipeline {
 
     private static final Logger log = LoggerFactory.getLogger(RemoteVariableAccessPipeline.class);
     private static final int PREVIEW_ROW_LIMIT = 20;
-    private static final List<String> DEFAULT_LIST_PATHS = List.of(
+    private static final List<String> DEFAULT_LIST_PATHS = java.util.Arrays.asList(
             "rows", "list", "items", "data.rows", "data.list", "data.items", "data.records", "records", "data");
-    private static final List<String> DEFAULT_MESSAGE_PATHS = List.of("msg", "message", "data.msg", "data.message");
-    private static final List<String> DEFAULT_SUCCESS_VALUES = List.of("0", "200", "true", "success", "ok");
+    private static final List<String> DEFAULT_MESSAGE_PATHS = java.util.Arrays.asList("msg", "message", "data.msg", "data.message");
+    private static final List<String> DEFAULT_SUCCESS_VALUES = java.util.Arrays.asList("0", "200", "true", "success", "ok");
 
     private final RestTemplate restTemplate;
     private final RemoteRequestBuilder requestBuilder;
@@ -119,10 +119,10 @@ public class RemoteVariableAccessPipeline {
         List<Map<String, Object>> rows = new ArrayList<>();
         for (JsonNode itemNode : itemNodes) {
             LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-            row.put("sourceCode", extractFirstText(itemNode, "", List.of("sourceCode", "code", "id", "bizNo")));
-            row.put("sourceName", extractFirstText(itemNode, "", List.of("sourceName", "name", "label", "title")));
-            row.put("businessDomain", extractFirstText(itemNode, "", List.of("businessDomain", "companyCode", "domain")));
-            row.put("value", extractFirstText(itemNode, "", List.of("value", "amount", "code", "id")));
+            row.put("sourceCode", extractFirstText(itemNode, "", java.util.Arrays.asList("sourceCode", "code", "id", "bizNo")));
+            row.put("sourceName", extractFirstText(itemNode, "", java.util.Arrays.asList("sourceName", "name", "label", "title")));
+            row.put("businessDomain", extractFirstText(itemNode, "", java.util.Arrays.asList("businessDomain", "companyCode", "domain")));
+            row.put("value", extractFirstText(itemNode, "", java.util.Arrays.asList("value", "amount", "code", "id")));
             row.put("rawJson", toCompactJson(itemNode));
             rows.add(row);
         }
@@ -135,10 +135,10 @@ public class RemoteVariableAccessPipeline {
         for (JsonNode itemNode : itemNodes) {
             LinkedHashMap<String, Object> mapped = new LinkedHashMap<>();
             mapped.put("variableCode", config.variableCode);
-            mapped.put("sourceCode", resolveMappedValue(itemNode, mappingConfig, "sourceCode", List.of("sourceCode", "code", "id", "bizNo")));
-            mapped.put("sourceName", resolveMappedValue(itemNode, mappingConfig, "sourceName", List.of("sourceName", "name", "label", "title")));
-            mapped.put("businessDomain", resolveMappedValue(itemNode, mappingConfig, "businessDomain", List.of("businessDomain", "companyCode", "domain")));
-            mapped.put("mappedValue", resolveMappedValue(itemNode, mappingConfig, "mappedValue", List.of("value", "amount", "code", "id")));
+            mapped.put("sourceCode", resolveMappedValue(itemNode, mappingConfig, "sourceCode", java.util.Arrays.asList("sourceCode", "code", "id", "bizNo")));
+            mapped.put("sourceName", resolveMappedValue(itemNode, mappingConfig, "sourceName", java.util.Arrays.asList("sourceName", "name", "label", "title")));
+            mapped.put("businessDomain", resolveMappedValue(itemNode, mappingConfig, "businessDomain", java.util.Arrays.asList("businessDomain", "companyCode", "domain")));
+            mapped.put("mappedValue", resolveMappedValue(itemNode, mappingConfig, "mappedValue", java.util.Arrays.asList("value", "amount", "code", "id")));
             mapped.put("dataPath", firstNonBlank(textValue(config.responseConfig, "listPath"), config.dataPath));
             mapped.put("sourceSystem", config.sourceSystem);
             mapped.put("rawJson", toCompactJson(itemNode));
@@ -201,7 +201,7 @@ public class RemoteVariableAccessPipeline {
             return limitPreviewRows(bodyNode);
         }
         if (ADAPTER_SINGLE_OBJECT.equals(config.adapterType)) {
-            return List.of(bodyNode);
+            return java.util.Arrays.asList(bodyNode);
         }
         String configuredListPath = firstNonBlank(textValue(config.responseConfig, "listPath"), config.dataPath);
         List<String> candidates = new ArrayList<>();
@@ -219,7 +219,7 @@ public class RemoteVariableAccessPipeline {
             }
         }
         if (ADAPTER_PAGE_ENVELOPE.equals(config.adapterType)) {
-            candidates.addAll(List.of("data.rows", "data.list", "rows", "list"));
+            candidates.addAll(java.util.Arrays.asList("data.rows", "data.list", "rows", "list"));
         }
         candidates.addAll(DEFAULT_LIST_PATHS);
         for (String candidate : candidates) {
@@ -235,7 +235,7 @@ public class RemoteVariableAccessPipeline {
         if (bodyNode.isArray()) {
             return limitPreviewRows(bodyNode);
         }
-        return List.of(bodyNode);
+        return java.util.Arrays.asList(bodyNode);
     }
 
     private List<JsonNode> limitPreviewRows(JsonNode arrayNode) {
@@ -272,7 +272,7 @@ public class RemoteVariableAccessPipeline {
             return Collections.emptyList();
         }
         if (StringUtils.isEmpty(path)) {
-            return List.of(root);
+            return java.util.Arrays.asList(root);
         }
         List<JsonNode> current = new ArrayList<>();
         current.add(root);
@@ -308,7 +308,7 @@ public class RemoteVariableAccessPipeline {
             return Collections.emptyList();
         }
         if (arrayMarker == null) {
-            return List.of(current);
+            return java.util.Arrays.asList(current);
         }
         if (!current.isArray()) {
             return Collections.emptyList();
@@ -322,7 +322,7 @@ public class RemoteVariableAccessPipeline {
             String indexText = arrayMarker.substring(1, arrayMarker.length() - 1);
             Integer index = parseInteger(indexText, -1);
             if (index != null && index >= 0 && index < current.size()) {
-                return List.of(current.get(index));
+                return java.util.Arrays.asList(current.get(index));
             }
         }
         return Collections.emptyList();

@@ -45,7 +45,7 @@ public class LiteSysConfigService implements ISysConfigService {
     @Override
     public List<SysConfig> selectConfigList(SysConfig query) {
         List<SysConfig> result = new ArrayList<>(configs.values());
-        if (query != null && query.getConfigKey() != null && !query.getConfigKey().isBlank()) {
+        if (query != null && query.getConfigKey() != null && !query.getConfigKey().trim().isEmpty()) {
             result.removeIf(item -> !query.getConfigKey().equals(item.getConfigKey()));
         }
         result.sort(Comparator.comparing(SysConfig::getConfigId, Comparator.nullsLast(Long::compareTo)));

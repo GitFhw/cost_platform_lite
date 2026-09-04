@@ -204,20 +204,22 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
                 || value instanceof Enum<?>) {
             return value;
         }
-        if (value instanceof BigInteger bigInteger) {
-            return bigInteger.doubleValue();
+        if (value instanceof BigInteger) {
+            return ((BigInteger) value).doubleValue();
         }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
-        if (value instanceof Map<?, ?> map) {
+        if (value instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) value;
             LinkedHashMap<Object, Object> normalized = new LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 normalized.put(entry.getKey(), normalizeContextValue(entry.getValue()));
             }
             return normalized;
         }
-        if (value instanceof Collection<?> collection) {
+        if (value instanceof Collection) {
+            Collection<?> collection = (Collection<?>) value;
             List<Object> normalized = new ArrayList<>(collection.size());
             for (Object item : collection) {
                 normalized.add(normalizeContextValue(item));
@@ -370,8 +372,8 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
         }
 
         protected boolean toBoolean(Object value) {
-            if (value instanceof Boolean bool) {
-                return bool;
+            if (value instanceof Boolean) {
+                return (Boolean) value;
             }
             return Boolean.parseBoolean(String.valueOf(value));
         }
@@ -380,11 +382,11 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
             if (value == null) {
                 return BigDecimal.ZERO;
             }
-            if (value instanceof BigDecimal decimal) {
-                return decimal;
+            if (value instanceof BigDecimal) {
+                return (BigDecimal) value;
             }
-            if (value instanceof BigInteger bigInteger) {
-                return new BigDecimal(bigInteger);
+            if (value instanceof BigInteger) {
+                return new BigDecimal((BigInteger) value);
             }
             return new BigDecimal(String.valueOf(value));
         }
@@ -416,11 +418,11 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
         }
 
         private static BigDecimal toBigDecimal(Object value) {
-            if (value instanceof BigDecimal decimal) {
-                return decimal;
+            if (value instanceof BigDecimal) {
+                return (BigDecimal) value;
             }
-            if (value instanceof BigInteger bigInteger) {
-                return new BigDecimal(bigInteger);
+            if (value instanceof BigInteger) {
+                return new BigDecimal((BigInteger) value);
             }
             if (value instanceof Number) {
                 return new BigDecimal(String.valueOf(value));
@@ -430,28 +432,41 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
 
         @Override
         public boolean overridesOperation(Operation operation, Object leftOperand, Object rightOperand) {
-            return switch (operation) {
-                case ADD, SUBTRACT, MULTIPLY, DIVIDE, MODULUS, POWER ->
-                        isNumericOperand(leftOperand) && isNumericOperand(rightOperand);
-                default -> false;
-            };
+            switch (operation) {
+                case ADD:
+                case SUBTRACT:
+                case MULTIPLY:
+                case DIVIDE:
+                case MODULUS:
+                case POWER:
+                    return isNumericOperand(leftOperand) && isNumericOperand(rightOperand);
+                default:
+                    return false;
+            }
         }
 
         @Override
         public Object operate(Operation operation, Object leftOperand, Object rightOperand) {
             BigDecimal left = toBigDecimal(leftOperand);
             BigDecimal right = toBigDecimal(rightOperand);
-            return switch (operation) {
-                case ADD -> left.add(right);
-                case SUBTRACT -> left.subtract(right);
-                case MULTIPLY -> left.multiply(right);
-                case DIVIDE -> right.compareTo(BigDecimal.ZERO) == 0
-                        ? BigDecimal.ZERO
-                        : left.divide(right, DIVIDE_SCALE, RoundingMode.HALF_UP).stripTrailingZeros();
-                case MODULUS -> right.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : left.remainder(right);
-                case POWER -> left.pow(right.intValue());
-                default -> throw new IllegalStateException("Unsupported numeric operation: " + operation);
-            };
+            switch (operation) {
+                case ADD:
+                    return left.add(right);
+                case SUBTRACT:
+                    return left.subtract(right);
+                case MULTIPLY:
+                    return left.multiply(right);
+                case DIVIDE:
+                    return right.compareTo(BigDecimal.ZERO) == 0
+                            ? BigDecimal.ZERO
+                            : left.divide(right, DIVIDE_SCALE, RoundingMode.HALF_UP).stripTrailingZeros();
+                case MODULUS:
+                    return right.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : left.remainder(right);
+                case POWER:
+                    return left.pow(right.intValue());
+                default:
+                    throw new IllegalStateException("Unsupported numeric operation: " + operation);
+            }
         }
     }
 }

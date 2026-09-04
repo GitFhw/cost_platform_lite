@@ -43,8 +43,10 @@ public class CostLiteBillingService {
             CostSimulationRecord log = logWriter.writeFailure(request, exception);
             Long logId = log == null ? null : log.getSimulationId();
             String message = StringUtils.defaultIfEmpty(exception.getMessage(), "计费执行失败");
-            Integer code = exception instanceof ServiceException serviceException
-                    ? serviceException.getCode() : null;
+            Integer code = null;
+            if (exception instanceof ServiceException) {
+                code = ((ServiceException) exception).getCode();
+            }
             throw new CostLiteBillingException(message, code, logId, exception);
         }
     }

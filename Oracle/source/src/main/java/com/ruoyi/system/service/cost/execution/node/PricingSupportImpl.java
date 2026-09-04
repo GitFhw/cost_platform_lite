@@ -28,13 +28,15 @@ public class PricingSupportImpl implements PricingSupport {
             return toBigDecimal(rule.pricingConfig.get(valueKey));
         }
         Object rawGroupPrices = rule.pricingConfig.get("groupPrices");
-        if (!(rawGroupPrices instanceof List<?> groupPrices)) {
+        if (!(rawGroupPrices instanceof List)) {
             throw new ServiceException(String.format("规则 %s 未配置组合定价明细", rule.ruleCode));
         }
+        List<?> groupPrices = (List<?>) rawGroupPrices;
         for (Object item : groupPrices) {
-            if (!(item instanceof Map<?, ?> rawMap)) {
+            if (!(item instanceof Map)) {
                 continue;
             }
+            Map<?, ?> rawMap = (Map<?, ?>) item;
             Integer groupNo = intValue(rawMap.get("groupNo"));
             if (Objects.equals(groupNo, rule.matchedGroupNo)) {
                 BigDecimal value = toBigDecimal(rawMap.get(valueKey));

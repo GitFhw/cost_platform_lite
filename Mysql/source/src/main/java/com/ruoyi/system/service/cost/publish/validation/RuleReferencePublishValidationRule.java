@@ -31,7 +31,7 @@ public class RuleReferencePublishValidationRule implements PublishValidationRule
             if (StringUtils.isNotEmpty(quantityVariableCode) && !variablesByCode.containsKey(quantityVariableCode)) {
                 missingQuantityVariables.add(ruleLabel + " -> " + quantityVariableCode);
             }
-            for (Map<String, Object> condition : context.getRuleConditionsByRuleCode().getOrDefault(ruleCode, List.of())) {
+            for (Map<String, Object> condition : context.getRuleConditionsByRuleCode().getOrDefault(ruleCode, java.util.Arrays.asList())) {
                 String variableCode = PublishValidationSupport.stringValue(condition.get("variableCode"));
                 if (StringUtils.isEmpty(variableCode)) {
                     continue;

@@ -156,7 +156,7 @@ public class CostFeeServiceImpl implements ICostFeeService {
      * 批量停用费用
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int disableFeeByIds(Long[] feeIds) {
         if (feeIds == null || feeIds.length == 0) {
             return 0;
@@ -183,7 +183,7 @@ public class CostFeeServiceImpl implements ICostFeeService {
      * 删除前先执行治理预检查，避免被规则、版本或结果链路引用时误删。
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int deleteFeeByIds(Long[] feeIds) {
         if (feeIds == null || feeIds.length == 0) {
             return 0;

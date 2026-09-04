@@ -8,7 +8,8 @@ import com.ruoyi.lite.web.CostLiteControllerSupport;
 import com.ruoyi.lite.web.CostLiteTableSupport;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
 import com.ruoyi.system.service.cost.ICostRunService;
-import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,15 +33,18 @@ public class CostLiteOperationsController extends CostLiteControllerSupport {
     private final DataSource dataSource;
     private final ICostRunService runService;
     private final CostLitePluginRegistry pluginRegistry;
+    private final Environment environment;
 
     public CostLiteOperationsController(CostLiteProperties properties,
-                                        ObjectProvider<DataSource> dataSource,
+                                        @Qualifier("costLiteDataSource") DataSource dataSource,
                                         ICostRunService runService,
-                                        CostLitePluginRegistry pluginRegistry) {
+                                        CostLitePluginRegistry pluginRegistry,
+                                        Environment environment) {
         super(properties);
-        this.dataSource = dataSource.getIfAvailable();
+        this.dataSource = dataSource;
         this.runService = runService;
         this.pluginRegistry = pluginRegistry;
+        this.environment = environment;
     }
 
     @GetMapping("/health")
@@ -49,8 +53,8 @@ public class CostLiteOperationsController extends CostLiteControllerSupport {
         result.put("service", "UP");
         result.put("database", databaseHealth(result));
         result.put("billingLogPersistence", properties.isPersistBillingLog() ? "ENABLED" : "DISABLED");
-        result.put("backgroundDispatch", "ENABLED".equalsIgnoreCase(System.getProperty("cost.dispatch.enabled", "false"))
-                ? "ENABLED" : "DISABLED");
+        boolean dispatchEnabled = environment.getProperty("cost.dispatch.enabled", Boolean.class, false);
+        result.put("backgroundDispatch", dispatchEnabled ? "ENABLED" : "DISABLED");
         result.put("plugins", pluginRegistry.getPlugins().size());
         return AjaxResult.success(result);
     }
@@ -64,10 +68,10 @@ public class CostLiteOperationsController extends CostLiteControllerSupport {
         result.put("authEnabled", properties.isAuthEnabled());
         result.put("persistBillingLog", properties.isPersistBillingLog());
         result.put("pluginEnabled", properties.isPluginEnabled());
-        result.put("plugins", pluginRegistry.getPlugins().stream().map(item -> item.getCode()).sorted().toList());
-        result.put("managementEndpoints", List.of(
+        result.put("plugins", pluginRegistry.getPlugins().stream().map(item -> item.getCode()).sorted().collect(java.util.stream.Collectors.toList()));
+        result.put("managementEndpoints", java.util.Arrays.asList(
                 "/cost/scene", "/cost/fee", "/cost/variable", "/cost/rule", "/cost/formula", "/cost/publish"));
-        result.put("openEndpoints", List.of(
+        result.put("openEndpoints", java.util.Arrays.asList(
                 "/cost/open/auth/token", "/cost/open/scenes", "/cost/open/fee-template", "/cost/open/fee/calculate"));
         result.put("deploymentModes", Arrays.asList("JAR独立库", "JAR初始化到业务库"));
         return AjaxResult.success(result);

@@ -488,7 +488,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
     }
 
     private List<?> listValue(Object value) {
-        return value instanceof List<?> list ? list : new ArrayList<>();
+        return value instanceof List ? (List<?>) value : new ArrayList<>();
     }
 
     private int updateFormulaInternal(CostFormula formula, String changeType) {

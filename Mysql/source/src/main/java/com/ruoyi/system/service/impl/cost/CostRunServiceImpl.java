@@ -29,11 +29,12 @@ import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService;
 import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService.InputBuildContext;
 import com.ruoyi.system.service.cost.variable.runtime.RuntimeRemoteVariableValueService;
 import com.ruoyi.system.service.cost.variable.runtime.RuntimeVariableComputeService;
-import jakarta.annotation.PostConstruct;
+import javax.annotation.PostConstruct;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.env.Environment;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -130,8 +131,10 @@ public class CostRunServiceImpl implements ICostRunService {
     @Autowired
     private CostRuleMapper ruleMapper;
     @Autowired
+    @Qualifier("costLiteThreadPoolTaskExecutor")
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
     @Autowired
+    @Qualifier("costLiteScheduledExecutorService")
     private ScheduledExecutorService scheduledExecutorService;
     @Autowired
     private RedisCache redisCache;
@@ -153,6 +156,7 @@ public class CostRunServiceImpl implements ICostRunService {
     @Autowired
     private CostDistributedLockSupport distributedLockSupport;
     @Autowired
+    @Qualifier("costLiteTransactionTemplate")
     private TransactionTemplate transactionTemplate;
     @Autowired
     private AccessProfileInputMappingService accessProfileInputMappingService;
@@ -360,7 +364,7 @@ public class CostRunServiceImpl implements ICostRunService {
         finishTask(taskId, startedTime);
     }
 
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public Map<String, Object> executeSimulation(CostSimulationExecuteBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false, true);
         List<RuntimeFee> targetFees = resolveTargetRuntimeFees(snapshot, bo.getFeeIds(), bo.getFeeId(), bo.getFeeCode());
@@ -874,7 +878,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public Map<String, Object> submitTask(CostCalcTaskSubmitBo bo) {
         return distributedLockSupport.executeTaskSubmitLock(bo.getSceneId(), bo.getVersionId(), bo.getBillMonth(),
                 bo.getTaskType(), bo.getRequestNo(), bo.getSourceBatchNo(),
@@ -957,7 +961,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public Map<String, Object> createInputBatch(CostCalcInputBatchCreateBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), true);
         validateBillMonth(bo.getBillMonth());
@@ -1578,7 +1582,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 }
                 Future<PartitionExecutionResult> future = completionService.take();
                 PartitionDispatchContext dispatchContext = futurePartitions.remove(future);
-                List<CostCalcTaskDetail> partition = dispatchContext == null ? List.of() : dispatchContext.partitionDetails;
+                List<CostCalcTaskDetail> partition = dispatchContext == null ? java.util.Arrays.asList() : dispatchContext.partitionDetails;
                 PartitionClaimToken claimToken = dispatchContext == null ? null : dispatchContext.claimToken;
                 completedCount++;
                 try {
@@ -1790,7 +1794,7 @@ public class CostRunServiceImpl implements ICostRunService {
     /**
      * 处理单条任务明细，并落结果台账与追溯解释。
      */
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     protected void processTaskDetail(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot) {
         Map<String, Object> input = parseObjectJson(detail.getInputJson(), "任务明细输入必须是 JSON 对象");
         purgeExistingTaskResults(task.getTaskId(), detail.getBizNo());
@@ -3331,7 +3335,7 @@ public class CostRunServiceImpl implements ICostRunService {
         LocalDate end = LocalDate.now(zoneId);
         LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
         for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-            List<CostCalcTask> dayTasks = grouped.getOrDefault(date, List.of());
+            List<CostCalcTask> dayTasks = grouped.getOrDefault(date, java.util.Arrays.asList());
             LinkedHashMap<String, Object> row = new LinkedHashMap<>();
             row.put("date", date.format(formatter));
             row.put("count", dayTasks.size());
@@ -3356,7 +3360,7 @@ public class CostRunServiceImpl implements ICostRunService {
         LocalDate end = LocalDate.now(zoneId);
         LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
         for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-            List<CostCalcTaskPartition> dayPartitions = grouped.getOrDefault(date, List.of());
+            List<CostCalcTaskPartition> dayPartitions = grouped.getOrDefault(date, java.util.Arrays.asList());
             LinkedHashMap<String, Object> row = new LinkedHashMap<>();
             row.put("date", date.format(formatter));
             row.put("count", dayPartitions.size());
@@ -3387,7 +3391,7 @@ public class CostRunServiceImpl implements ICostRunService {
                         .thenComparing(CostCalcTask::getTaskId, Comparator.reverseOrder()))
                 .limit(limit)
                 .map(task -> {
-                    List<CostCalcTaskPartition> taskPartitions = partitionMap.getOrDefault(task.getTaskId(), List.of());
+                    List<CostCalcTaskPartition> taskPartitions = partitionMap.getOrDefault(task.getTaskId(), java.util.Arrays.asList());
                     LinkedHashMap<String, Object> row = new LinkedHashMap<>();
                     row.put("taskId", task.getTaskId());
                     row.put("taskNo", task.getTaskNo());
@@ -3439,7 +3443,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     private Map<String, Object> buildPartitionOwnerSummary(List<CostCalcTaskPartition> partitions) {
-        List<CostCalcTaskPartition> safePartitions = partitions == null ? List.of() : partitions;
+        List<CostCalcTaskPartition> safePartitions = partitions == null ? java.util.Arrays.asList() : partitions;
         LocalDateTime staleThreshold = LocalDateTime.now().minusSeconds(resolveTaskStaleTimeoutSeconds());
         long claimedPartitionCount = safePartitions.stream()
                 .filter(item -> StringUtils.isNotEmpty(item.getExecuteNode()))
@@ -3505,7 +3509,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 .collect(Collectors.groupingBy(CostCalcTaskPartition::getTaskId));
         return (tasks == null ? List.<CostCalcTask>of() : tasks).stream()
                 .filter(item -> item.getTaskId() != null)
-                .map(task -> buildOwnerRiskTaskRow(task, partitionMap.getOrDefault(task.getTaskId(), List.of()), staleThreshold))
+                .map(task -> buildOwnerRiskTaskRow(task, partitionMap.getOrDefault(task.getTaskId(), java.util.Arrays.asList()), staleThreshold))
                 .filter(Objects::nonNull)
                 .sorted(Comparator
                         .comparingLong((Map<String, Object> item) -> NumberUtils.toLong(String.valueOf(item.get("staleRunningOwnerCount")), 0L)).reversed()

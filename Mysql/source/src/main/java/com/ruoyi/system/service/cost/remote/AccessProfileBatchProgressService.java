@@ -62,7 +62,7 @@ public class AccessProfileBatchProgressService {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> castMap(Object value) {
-        return value instanceof Map ? (Map<String, Object>) value : Map.of();
+        return value instanceof Map ? (Map<String, Object>) value : java.util.Collections.emptyMap();
     }
 
     private String firstNonBlank(String first, String second) {

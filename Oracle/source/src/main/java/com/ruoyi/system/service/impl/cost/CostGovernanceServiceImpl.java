@@ -108,7 +108,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int createPeriod(CostBillPeriodSaveBo bo) {
         CostScene scene = requireScene(bo.getSceneId());
         ensureBillMonth(bo.getBillMonth());
@@ -139,7 +139,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int sealPeriod(Long periodId) {
         CostBillPeriod before = requirePeriod(periodId);
         if (PERIOD_STATUS_SEALED.equals(before.getPeriodStatus())) {
@@ -240,7 +240,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int applyRecalc(CostRecalcApplyBo bo) {
         CostScene scene = requireScene(bo.getSceneId());
         CostBillPeriod period = requirePeriod(scene.getSceneId(), bo.getBillMonth());
@@ -272,7 +272,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     public int approveRecalc(Long recalcId, CostRecalcApproveBo bo) {
         CostRecalcOrder before = requireRecalc(recalcId);
         boolean approved = Boolean.TRUE.equals(bo.getApproved());
@@ -293,7 +293,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
     @SuppressWarnings("unchecked")
     public int executeRecalc(Long recalcId) {
         CostRecalcOrder before = requireRecalc(recalcId);
