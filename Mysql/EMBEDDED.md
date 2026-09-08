@@ -1,6 +1,6 @@
 # MySQL 同进程嵌入式集成
 
-本分支的推荐方案是：业务项目只引入 `cost-lite-starter-mysql`，计费入口和核心逻辑进入业务项目自己的 Spring 容器，同一个 JVM 内直接访问独立的 `cost_platform_lite` 数据库。不会再启动 `cost-lite-server`，也不需要把核心源码复制到客户项目。
+本分支的推荐方案是：业务项目只引入 `cost-lite-starter-mysql`，计费入口和核心逻辑进入业务项目自己的 Spring 容器，同一个 JVM 内运行。计费表既可以放在专用库，也可以放在宿主业务库；不会再启动 `cost-lite-server`，也不需要把核心源码复制到客户项目。
 
 ## 1. 两个 Jar 的关系
 
@@ -9,13 +9,13 @@
 | 制品 | 职责 | 是否需要单独启动 |
 | --- | --- | --- |
 | `cost-lite-core-mysql` | 计费实体、Mapper、规则/公式引擎、Service、数据库 XML | 否，作为依赖加载 |
-| `cost-lite-starter-mysql` | Spring Boot 自动配置、独立数据源、Mapper 注册、`/cost/**` Controller 入口 | 否，随业务应用加载 |
+| `cost-lite-starter-mysql` | Spring Boot 自动配置、专用数据源或宿主数据源复用、Mapper 注册、`/cost/**` Controller 入口 | 否，随业务应用加载 |
 
 客户项目只声明 `cost-lite-starter-mysql` 一个依赖，Maven 会自动传递下载 Core 和 MySQL 驱动；不需要手工写多条依赖，也不需要执行第二个 `java -jar`。`cost-lite-server` 只是旧项目或独立部署场景的兼容入口。
 
 ## 2. 客户项目添加依赖
 
-要求：Java 8、Spring Boot 2.7、Servlet Web 应用。建议把两个制品发布到企业 Maven 仓库：
+要求：Java 8、Spring Boot 2.7.x Servlet Web 应用；该入口不依赖若依包名，成熟框架只要兼容 Spring Boot 2.7、Servlet 和 Spring 容器即可接入。建议把两个制品发布到企业 Maven 仓库：
 
 ```xml
 <properties>
@@ -38,9 +38,28 @@ mvn -f Mysql\pom.xml clean install -DskipTests
 
 业务项目仍只引用 `cost-lite-starter-mysql`，不要把 `Mysql/source/` 复制进去。
 
-## 3. 独立数据库配置
+## 3. 数据库配置方式
 
-先执行 [cost-lite-schema.sql](sql/cost-lite-schema.sql)，然后在业务项目外部配置文件或配置中心加入：
+先执行 [cost-lite-schema.sql](sql/cost-lite-schema.sql)。这份默认脚本只创建工作台和试算所需表；正式任务、正式结果追溯、重算/告警或 OpenApp 只有在明确启用时，才继续执行 [cost-lite-formal-schema.sql](sql/cost-lite-formal-schema.sql)。数据库落位有两种方式，配置只保留一种：
+
+### 3.1 复用宿主业务数据源
+
+把同一份 SQL 初始化到宿主业务库，省略 `cost.lite.datasource.url`，Starter 会复用名为 `dataSource` 的宿主 `DataSource`：
+
+```yaml
+cost:
+  lite:
+    embedded:
+      enabled: true
+    datasource:
+      host-bean-name: ${COST_LITE_HOST_DATASOURCE_BEAN:dataSource}
+```
+
+如果宿主数据源 Bean 名称不是 `dataSource`，只调整 `host-bean-name`，不改计费代码。
+
+### 3.2 使用专用计费库
+
+把 SQL 初始化到专用数据库后，在业务项目外部配置文件或配置中心加入：
 
 ```yaml
 cost:
@@ -61,7 +80,7 @@ cost:
         connection-timeout: 5000
 ```
 
-Lite 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目原有的 `spring.datasource`。数据库密码只通过环境变量或配置中心提供，不写入 Git。Starter 会传递 MySQL JDBC 驱动；业务项目无需再复制核心源码。
+Lite 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目原有的 `spring.datasource`。数据库密码只通过环境变量或配置中心提供，不写入 Git。Starter 会传递 MySQL JDBC 驱动；业务项目无需再复制核心源码。专用库配置只在需要与业务库隔离时使用，省略 URL 即切换为宿主库。
 
 ## 4. 自动注册后的接口
 
@@ -89,8 +108,8 @@ databaseName                                     -> cost_platform_lite
 GET http://127.0.0.1:18081/cost/scene/optionselect -> 200
 ```
 
-示例还同时配置了宿主默认 `spring.datasource` 和 Lite 独立数据源，验证了两套连接池可以在同一 JVM 共存。
+示例默认使用宿主 `spring.datasource` 作为计费数据源；设置 `COST_LITE_DB_URL` 后可切换为专用计费连接池，用于验证两种落位方式。
 
 ## 6. 老项目的选择
 
-本 Starter 当前按 Java 8 + Spring Boot 2.7 编译，适用于 Java 8 的 Servlet 宿主。传统 SSM 或无法共存 MyBatis 数据源的项目继续使用 `Mysql/backend-integration` 的 HTTP Starter + `cost-lite-server`；二者都不复制核心源码。Spring Boot 3 宿主需要另做 `jakarta.*` 适配，当前交付包不把 Boot 2 与 Boot 3 依赖混装。
+本 Starter 当前按 Java 8 + Spring Boot 2.7 编译，适用于 Java 8 的通用 Servlet 宿主，不要求宿主使用若依。传统 SSM、非 Spring Boot 宿主使用 `Mysql/backend-integration/cost-lite-client` 直接调用独立 Jar；只有 Spring Boot 2.7 宿主才使用同目录的 HTTP Starter 代理。无法共存 MyBatis 数据源或需要进程隔离的项目仍可选择独立 Jar，所有路径都不复制核心源码。Spring Boot 3 宿主需要另做 `jakarta.*` 适配，当前交付包不把 Boot 2 与 Boot 3 依赖混装。

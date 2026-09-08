@@ -5,7 +5,9 @@ import com.ruoyi.common.core.domain.model.LoginUser;
 import com.ruoyi.lite.config.CostLiteProperties;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -21,6 +23,7 @@ import java.util.Collections;
 @Component
 public class CostLiteOperatorInterceptor implements HandlerInterceptor {
     private static final String INSTALLED_ATTRIBUTE = CostLiteOperatorInterceptor.class.getName() + ".installed";
+    private static final String ORIGINAL_AUTHENTICATION_ATTRIBUTE = CostLiteOperatorInterceptor.class.getName() + ".original";
     private final CostLiteProperties properties;
 
     public CostLiteOperatorInterceptor(CostLiteProperties properties) {
@@ -29,9 +32,9 @@ public class CostLiteOperatorInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        Object principal = SecurityContextHolder.getContext().getAuthentication() == null
-                ? null : SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal instanceof LoginUser) {
+        Authentication original = SecurityContextHolder.getContext().getAuthentication();
+        if (original != null && original.isAuthenticated()
+                && !(original instanceof AnonymousAuthenticationToken)) {
             return true;
         }
 
@@ -42,6 +45,7 @@ public class CostLiteOperatorInterceptor implements HandlerInterceptor {
         LoginUser loginUser = new LoginUser(user, Collections.singleton("*:*:*"));
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(loginUser, null, Collections.emptyList());
+        request.setAttribute(ORIGINAL_AUTHENTICATION_ATTRIBUTE, original);
         SecurityContextHolder.getContext().setAuthentication(authentication);
         request.setAttribute(INSTALLED_ATTRIBUTE, Boolean.TRUE);
         return true;
@@ -50,7 +54,9 @@ public class CostLiteOperatorInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         if (Boolean.TRUE.equals(request.getAttribute(INSTALLED_ATTRIBUTE))) {
-            SecurityContextHolder.clearContext();
+            Object original = request.getAttribute(ORIGINAL_AUTHENTICATION_ATTRIBUTE);
+            SecurityContextHolder.getContext().setAuthentication(
+                    original instanceof Authentication ? (Authentication) original : null);
         }
     }
 

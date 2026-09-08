@@ -17,3 +17,8 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+
+cost:
+  lite:
+    formal-enabled: ${COST_LITE_FORMAL_ENABLED:false}
+    open-api-enabled: ${COST_LITE_OPEN_API_ENABLED:false}

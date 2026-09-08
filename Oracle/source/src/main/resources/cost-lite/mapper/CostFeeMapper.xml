@@ -136,7 +136,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 where ver.scene_id = f.scene_id
                   and snap.snapshot_type = 'FEE'
                   and snap.object_code = f.fee_code) as publishedVersionCount,
-               (select count(1) from cost_result_ledger l where l.fee_id = f.fee_id) as resultLedgerCount,
+               0 as resultLedgerCount,
                (select count(1) from cost_rule r where r.fee_id = f.fee_id and r.status = '0') as enabledRuleCount,
                (select count(1) from cost_rule r where r.fee_id = f.fee_id and r.status != '0') as disabledRuleCount,
                (select count(1)

@@ -10,8 +10,9 @@
 交付包目录：<cost_platform_lite_integration_repo>
 目标业务项目目录：<host-project>
 数据库类型：MYSQL 或 ORACLE
-计费 Jar 地址：<jar-path-or-url>
-计费 Jar 基础地址：<cost-lite-base-url>
+嵌入 Starter 制品来源：<Maven 坐标或本地仓库路径>
+兼容模式 Jar 地址：<仅 HTTP 代理模式填写 jar-path-or-url>
+兼容模式 Jar 基础地址：<仅 HTTP 代理模式填写 cost-lite-base-url>
 目标宿主入口：/cost/**
 前端技术栈：从目标项目实际 package.json 判断
 后端技术栈：从目标项目实际 pom.xml、build.gradle 和源码判断
@@ -19,14 +20,14 @@
 
 如果用户已经明确提供了本地测试数据库地址、账号或密码，只能用于当前运行验证，禁止写入 Git、源码、前端包、日志和最终文档。没有明确授权时，不得写入生产库。
 
-本分支提供 MySQL 和 Oracle 两套同进程嵌入模式。开始迁移时先判断目标宿主：Java 8 + Spring Boot 2.7 Servlet 应用优先使用数据库匹配的 `cost-lite-starter-mysql` 或 `cost-lite-starter-oracle`；传统 SSM、无法共存 MyBatis 数据源或需要进程隔离的项目继续使用对应 `backend-integration` HTTP Starter + 独立 `cost-lite-server`。不要把两种模式混用。
+本分支提供 MySQL 和 Oracle 两套同进程嵌入模式。开始迁移时先判断目标宿主：Java 8 + Spring Boot 2.7.x Servlet 应用优先使用数据库匹配的 `cost-lite-starter-mysql` 或 `cost-lite-starter-oracle`；传统 SSM、非 Spring Boot 宿主直接使用对应 `backend-integration/cost-lite-client`；Spring Boot 2.7 但无法同进程接入或需要进程隔离时，才使用对应 HTTP Starter + 独立 `cost-lite-server`。不要把三种模式混用。
 
 ## 二、必须遵守的架构边界
 
 1. 嵌入模式中，`cost-lite-core-mysql`/`cost-lite-core-oracle` 是计费核心普通 Jar，`cost-lite-starter-mysql`/`cost-lite-starter-oracle` 只负责自动配置和入口注册；两者随宿主业务应用同进程运行。兼容模式中，独立 MySQL/Oracle Jar 才是计费核心运行单元，HTTP Starter 只负责代理。两种模式都不得复制或重写计费核心逻辑。
 2. 目标业务项目只接入可迁移的 Starter/Client 入口和前台页面，不得把母体项目的全部源码、模块、Controller、Service、Mapper、RuoYi 基础表或业务代码复制进目标项目。
 3. 宿主业务后端通过自身的 `/cost/**` 接口访问计费能力。浏览器只能访问宿主接口，不能直接访问计费 Jar，也不能携带数据库账号、管理 Token 或 OpenApp 密钥。
-4. 嵌入 Starter 使用 `cost.lite.datasource.*` 连接独立计费库，并固定到命名的 Lite 数据源和事务管理器；兼容模式的 HTTP Starter 不连接数据库，由独立计费 Jar 读取 JDBC 配置。两种模式都可以使用独立库或业务库中的 `cost_*` 表。
+4. 嵌入 Starter 固定使用命名的 Lite 数据源和事务管理器：配置 `cost.lite.datasource.url` 时连接专用计费库，省略 URL 时复用 `cost.lite.datasource.host-bean-name` 指定的宿主 `DataSource`；兼容模式的 HTTP Starter 不连接数据库，由独立计费 Jar 读取 JDBC 配置。两种模式都可以使用独立库或业务库中的 `cost_*` 表。
 5. 必须复用母体 `cost_*` 表、字段、编码和接口语义。禁止新建 `lite_*`、`billing_*` 或其他平行实体来替代母体实体。
 6. 不得把完整母体工程或无关模块复制到目标项目。目标项目只接入集成入口、前端页面、配置模板、对应数据库初始化 SQL 和已发布 Jar；核心源码只在本交付仓库对应数据库的 `source/` 目录维护。
 
@@ -44,14 +45,14 @@
 1. 识别目标项目的 Spring Boot 大版本、Java 版本、Maven/Gradle 构建方式、Vue 版本和组件库。
 2. 检查目标项目是否已有 `/cost/**` 路由、同名 Bean、同名依赖、全局登录拦截器、网关转发规则和前端菜单。
 3. 检查数据库类型，并确认目标库中是否已经存在 `cost_*`、`sys_dict_type`、`sys_dict_data` 同名表。存在同名表时先比对字段和索引，禁止直接覆盖。
-4. Java 8 + Spring Boot 2.7 Servlet 项目检查对应数据库的 `starter`；其他项目检查对应数据库的 `backend-integration` 和独立运行 Jar，只使用匹配的集成入口。当前交付包不把 Boot 2 的 `javax.*` 依赖与 Boot 3 的 `jakarta.*` 依赖混装。
+4. Java 8 + Spring Boot 2.x Servlet 项目检查对应数据库的 `starter`；其他项目检查对应数据库的 `backend-integration` 和独立运行 Jar，只使用匹配的集成入口。当前交付包不把 Boot 2 的 `javax.*` 依赖与 Boot 3 的 `jakarta.*` 依赖混装。
 5. 检查当前 Git 工作区，保留用户已有改动，不使用 `git reset --hard`、`git checkout --` 或其他破坏性回退命令。
 
 ## 四、后端集成要求
 
 ### 4.1 依赖和配置
 
-Java 8 + Spring Boot 2.7 Servlet 项目优先使用数据库匹配的嵌入 Starter。如果目标项目不能直接引用本地 Maven 模块，则先执行对应数据库根目录的 `mvn clean install -DskipTests` 或发布 Maven 制品，再在目标项目中增加依赖，不得复制 Java 源码。传统 SSM、数据源冲突项目或需要进程隔离的项目使用对应 `cost-lite-spring-boot-starter` HTTP 代理。
+Java 8 + Spring Boot 2.x Servlet 项目优先使用数据库匹配的嵌入 Starter。如果目标项目不能直接引用本地 Maven 模块，则先执行对应数据库根目录的 `mvn clean install -DskipTests` 或发布 Maven 制品，再在目标项目中增加依赖，不得复制 Java 源码。传统 SSM、非 Spring Boot 项目使用对应 `cost-lite-client`；只有 Spring Boot 2.7 代理宿主才使用对应 `cost-lite-spring-boot-starter` HTTP 代理。
 
 嵌入模式宿主 POM：
 
@@ -64,7 +65,7 @@ Java 8 + Spring Boot 2.7 Servlet 项目优先使用数据库匹配的嵌入 Star
 </dependency>
 ```
 
-嵌入模式配置：
+嵌入模式配置（默认复用宿主数据源）：
 
 ```yaml
 cost:
@@ -72,12 +73,10 @@ cost:
     embedded:
       enabled: true
     datasource:
-      url: ${COST_LITE_DB_URL}
-      username: ${COST_LITE_DB_USERNAME}
-      password: ${COST_LITE_DB_PASSWORD}
+      host-bean-name: ${COST_LITE_HOST_DATASOURCE_BEAN:dataSource}
 ```
 
-Starter 会自动注册 `/cost/**` Controller、Service、Mapper 和独立数据源，不需要新增启动类或单独启动 `cost-lite-server`。业务项目已有 `spring.datasource` 保持不变。
+如果使用专用计费库，把 `cost.lite.datasource.url`、`username`、`password` 和数据库匹配的 `driver-class-name` 补上；不要同时保留两套配置。Starter 会自动注册 `/cost/**` Controller、Service、Mapper 和命名计费数据源，不需要新增启动类或单独启动 `cost-lite-server`。数据库初始化到业务库时复用宿主数据源，初始化到专用库时使用专用配置。
 
 以下是旧项目 HTTP 代理模式配置：
 
@@ -99,7 +98,7 @@ cost:
 
 要求：
 
-- 只有 HTTP 代理模式配置 `base-url`，它指向 MySQL 或 Oracle 对应的计费 Jar；嵌入模式改配 `cost.lite.datasource.*`，不配置 `base-url`。
+- 只有 HTTP 代理模式配置 `base-url`，它指向 MySQL 或 Oracle 对应的计费 Jar；嵌入模式不配置 `base-url`，按数据库落位选择复用宿主 `DataSource` 或配置 `cost.lite.datasource.*` 专用连接。
 - `web-path` 默认配置为 `/cost`，使宿主项目对外暴露 `/cost/**`。
 - 管理 Token 只能由宿主后端配置读取；不得下发浏览器。
 - 代理路由必须使用 Starter 的稳定路由键和默认上游路径。只有目标项目确有冲突时才通过 `upstream-paths` 覆盖单个路径。
@@ -108,10 +107,17 @@ cost:
 
 ### 4.2 数据库初始化
 
-根据数据库类型只执行一份初始化脚本：
+根据数据库类型默认只执行一份轻量初始化脚本：
 
 - MySQL：`Mysql/sql/cost-lite-schema.sql`
 - Oracle：`Oracle/sql/cost-lite-schema.sql`
+
+默认脚本只创建工作台、发布、试算日志/结果和页面字典所需的母体表。若业务后端明确需要正式任务、正式结果追溯、重算/告警或 OpenApp，再在同一个目标库执行对应的可选脚本：
+
+- MySQL：`Mysql/sql/cost-lite-formal-schema.sql`
+- Oracle：`Oracle/sql/cost-lite-formal-schema.sql`
+
+可选脚本执行后才允许打开 `cost.lite.formal-enabled=true` 或 `cost.lite.open-api-enabled=true`；当前工作台只做配置和试算，不需要执行可选脚本。
 
 初始化原则：
 

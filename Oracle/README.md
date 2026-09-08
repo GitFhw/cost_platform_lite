@@ -2,7 +2,7 @@
 
 接口字段、场景级调用、指定费目调用和 Java/cURL 示例见：[Oracle/API.md](API.md)。
 
-本目录是可直接交付给第三方业务系统的 Oracle 集成包。Java 8 + Spring Boot 2.7 Servlet 项目推荐引入 `cost-lite-starter-oracle` 同进程接入；传统 SSM 或需要进程隔离的项目可使用独立 Jar + HTTP 代理。`source/` 保存本仓库维护用的 Oracle 计费核心源码；客户迁移只使用 Starter/Jar、前端、配置和 SQL，不需要复制源码。同进程说明见 [EMBEDDED.md](EMBEDDED.md)。
+本目录是可直接交付给第三方业务系统的 Oracle 集成包。Java 8 + Spring Boot 2.7 Servlet 项目推荐引入 `cost-lite-starter-oracle` 同进程接入；非 Boot/传统 SSM 项目使用无 Spring `cost-lite-client`，需要进程隔离时再使用独立 Jar。`source/` 保存本仓库维护用的 Oracle 计费核心源码；客户迁移只使用 Starter/Client/Jar、前端、配置和 SQL，不需要复制源码。同进程说明见 [EMBEDDED.md](EMBEDDED.md)。
 
 ## 1. 交付内容
 
@@ -40,7 +40,9 @@ Jar 加密暂未纳入本版本。后续如需授权控制，可在不改变宿�
 
 - 运行 Jar：Java 8 及以上。
 - Oracle：12c 或更高版本，推荐 19c、21c 或 23ai；数据库用户需要 `CREATE SESSION`、建表权限和对应表空间配额。
-- 同进程宿主：Java 8 + Spring Boot 2.7 Servlet 应用；传统 SSM 或其他版本使用 HTTP 代理方式。
+- 同进程宿主：Java 8 + Spring Boot 2.7 Servlet 应用。
+- 无 Spring `cost-lite-client`：Java 8+，适用于传统 SSM、非 Spring Boot 或其他 Java 服务。
+- HTTP 代理 Starter：Java 8 + Spring Boot 2.7 Servlet 宿主；非 Boot 宿主不要引入该 Starter。
 - 宿主前端：Vue 3、Element Plus。前端工作台接入方式见 `../Front/README.md`。
 
 Oracle 使用 Service Name 连接时，URL 采用：
@@ -100,7 +102,7 @@ FROM user_tables
 WHERE table_name LIKE 'COST\_%' ESCAPE '\\';
 ```
 
-本交付脚本包含母体当前冻结模型的 26 张 `cost_*` 表、相关二级索引，以及工作台实际需要的 `sys_dict_type`、`sys_dict_data` 两张字典表。字典只初始化计费页面需要的类型和值，不迁移其他 RuoYi `sys_*` 表、账单表或客户业务表；若业务库已有同名母体字典表，脚本会复用现有表并只补充缺失的计费字典值。
+默认交付脚本包含工作台和试算链路需要的 14 张母体 `cost_*` 表、相关二级索引，以及页面实际需要的 `sys_dict_type`、`sys_dict_data` 两张字典表。正式任务、正式结果、重算/告警和 OpenApp 表位于单独的 [cost-lite-formal-schema.sql](sql/cost-lite-formal-schema.sql)，只有启用对应后端能力时才执行。默认脚本不迁移其他 RuoYi `sys_*` 表、账单表或客户业务表；若业务库已有同名母体字典表，脚本会复用现有表并只补充缺失的计费字典值。
 
 ## 4. 启动 Oracle 运行 Jar
 
@@ -186,7 +188,7 @@ curl http://127.0.0.1:18082/cost/lite/bootstrap
 
 ### 6.1 同进程 Starter
 
-Java 8 + Spring Boot 2.7 Servlet 项目推荐依赖 `com.costplatform.lite:cost-lite-starter-oracle`。它会自动注册计费入口并使用 `cost.lite.datasource.*` 建立命名的 Oracle 计费数据源，不启动独立 Jar。完整配置见 [EMBEDDED.md](EMBEDDED.md)。
+Java 8 + Spring Boot 2.7 Servlet 项目推荐依赖 `com.costplatform.lite:cost-lite-starter-oracle`。它会自动注册计费入口；配置 `cost.lite.datasource.url` 时建立命名的 Oracle 专用数据源，省略该配置时复用宿主数据源，不启动独立 Jar。完整配置见 [EMBEDDED.md](EMBEDDED.md)。
 
 ```xml
 <dependency>
@@ -198,7 +200,9 @@ Java 8 + Spring Boot 2.7 Servlet 项目推荐依赖 `com.costplatform.lite:cost-
 
 嵌入模式前端调用母体兼容路径，使用 `routeMode: "runtime"`；宿主继续负责登录、菜单、权限和 CORS。
 
-### 6.2 独立 Jar + HTTP
+### 6.2 非 Boot Client 或独立 Jar + HTTP
+
+传统 SSM、非 Spring Boot 或其他 Java 服务，优先引用 `Oracle/backend-integration/cost-lite-client`。Client 不依赖 Spring，可以直接调用独立 Jar 的 `/cost/run/fee/calculate`；完整类和请求体示例见 [API.md](API.md)。如果业务系统不希望引入任何 Client 代码，也可以由网关或同源反向代理直接访问独立 Jar 的 `/cost/**` 路由。
 
 业务系统不需要复制母体 Controller、Service、Mapper 或实体，只需通过网关或同源反向代理访问 Jar 的 `/cost/**` 路由。前端适配器使用 `routeMode: "runtime"`。
 
@@ -243,7 +247,7 @@ cost:
       max-retries: 0
 ```
 
-Starter 只负责稳定代理和响应适配，不接管宿主登录、角色和菜单权限。宿主按自己的安全框架保护 `/cost/**`，因此 RuoYi、Spring Cloud 或其他成熟框架都可以接入。
+Starter 只负责稳定代理和响应适配，不接管宿主登录、角色和菜单权限。宿主按自己的安全框架保护 `/cost/**`，因此 RuoYi、Spring Cloud 或其他成熟框架都可以接入；非 Boot 宿主使用上一节的 Client，不依赖该 Starter。
 
 宿主启动后检查：
 

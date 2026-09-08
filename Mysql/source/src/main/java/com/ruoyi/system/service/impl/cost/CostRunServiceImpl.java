@@ -13,6 +13,7 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.lite.config.CostLiteProperties;
 import com.ruoyi.system.config.cost.CostDispatchProperties;
 import com.ruoyi.system.domain.cost.*;
 import com.ruoyi.system.domain.cost.bo.*;
@@ -165,8 +166,15 @@ public class CostRunServiceImpl implements ICostRunService {
     @Autowired
     private CostDispatchProperties costDispatchProperties;
 
+    @Autowired
+    private CostLiteProperties liteProperties;
+
     @PostConstruct
     public void startTaskDispatchCoordinator() {
+        if (!liteProperties.isFormalEnabled()) {
+            log.info("轻量模式未启用正式核算表，关闭成本任务后台调度扫描");
+            return;
+        }
         if (costDispatchProperties != null && !costDispatchProperties.isEnabled()) {
             log.info("成本任务后台调度扫描已关闭，保留显式任务提交和同步计费能力");
             return;
@@ -3472,7 +3480,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     private List<Map<String, Object>> buildPartitionOwnerDistribution(List<CostCalcTaskPartition> partitions, int limit) {
-        return (partitions == null ? List.<CostCalcTaskPartition>of() : partitions).stream()
+        return (partitions == null ? Collections.<CostCalcTaskPartition>emptyList() : partitions).stream()
                 .filter(item -> StringUtils.isNotEmpty(item.getExecuteNode()))
                 .collect(Collectors.groupingBy(CostCalcTaskPartition::getExecuteNode))
                 .entrySet()
@@ -3504,10 +3512,10 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private List<Map<String, Object>> buildTopOwnerRiskTasks(List<CostCalcTask> tasks, List<CostCalcTaskPartition> partitions, int limit) {
         LocalDateTime staleThreshold = LocalDateTime.now().minusSeconds(resolveTaskStaleTimeoutSeconds());
-        Map<Long, List<CostCalcTaskPartition>> partitionMap = (partitions == null ? List.<CostCalcTaskPartition>of() : partitions).stream()
+        Map<Long, List<CostCalcTaskPartition>> partitionMap = (partitions == null ? Collections.<CostCalcTaskPartition>emptyList() : partitions).stream()
                 .filter(item -> item.getTaskId() != null)
                 .collect(Collectors.groupingBy(CostCalcTaskPartition::getTaskId));
-        return (tasks == null ? List.<CostCalcTask>of() : tasks).stream()
+        return (tasks == null ? Collections.<CostCalcTask>emptyList() : tasks).stream()
                 .filter(item -> item.getTaskId() != null)
                 .map(task -> buildOwnerRiskTaskRow(task, partitionMap.getOrDefault(task.getTaskId(), java.util.Arrays.asList()), staleThreshold))
                 .filter(Objects::nonNull)

@@ -14,6 +14,8 @@ mybatis-plus:
 
 cost:
   lite:
+    formal-enabled: ${COST_LITE_FORMAL_ENABLED:false}
+    open-api-enabled: ${COST_LITE_OPEN_API_ENABLED:false}
     dictionary:
       provider: ${COST_LITE_DICTIONARY_PROVIDER:SYSTEM}
       validation-enabled: ${COST_LITE_DICTIONARY_VALIDATION_ENABLED:true}

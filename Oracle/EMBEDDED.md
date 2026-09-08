@@ -1,13 +1,13 @@
 # Oracle 同进程嵌入式集成
 
-Java 8 + Spring Boot 2.7 Servlet 业务项目只引入 `cost-lite-starter-oracle`，计费 Controller、Service、Mapper 和核心规则执行在业务应用同一个 JVM 内运行，不启动单独的 Lite 进程，也不复制 `Oracle/source/`。
+Java 8 + Spring Boot 2.7.x Servlet 业务项目只引入 `cost-lite-starter-oracle`。计费 Controller、Service、Mapper 和核心规则执行在业务应用同一个 JVM 内运行，不启动单独的 Lite 进程，也不复制 `Oracle/source/`；入口不依赖若依包名。
 
 ## 1. 制品关系
 
 | 制品 | 职责 | 是否单独启动 |
 | --- | --- | --- |
 | `cost-lite-core-oracle` | 母体计费实体、Mapper、规则/公式执行、发布和试算核心 | 否，作为依赖加载 |
-| `cost-lite-starter-oracle` | Spring Boot 自动配置、Oracle 独立数据源、Mapper 注册和 `/cost/**` 入口 | 否，随业务应用加载 |
+| `cost-lite-starter-oracle` | Spring Boot 自动配置、Oracle 专用数据源或宿主数据源复用、Mapper 注册和 `/cost/**` 入口 | 否，随业务应用加载 |
 
 业务项目只声明 `cost-lite-starter-oracle`，Maven 会传递引入 Core 和 Oracle JDBC 驱动。Starter 的实现契约与 MySQL Starter 一致，数据库差异由对应 Core、驱动、SQL 和 Oracle 方言适配承担。
 
@@ -35,7 +35,26 @@ mvn -f Oracle/pom.xml clean install -DskipTests
 
 ## 3. 配置计费数据库
 
-先由 DBA 执行 [cost-lite-schema.sql](sql/cost-lite-schema.sql)。计费库可以是独立 Oracle Schema，也可以是业务 Schema；只要 SQL 已初始化且 JDBC 用户可访问 `cost_*`、`sys_dict_type`、`sys_dict_data` 即可。
+先由 DBA 执行 [cost-lite-schema.sql](sql/cost-lite-schema.sql)。这份默认脚本只创建工作台和试算所需表；正式任务、正式结果追溯、重算/告警或 OpenApp 只有在明确启用时，才继续执行 [cost-lite-formal-schema.sql](sql/cost-lite-formal-schema.sql)。计费表可以放在独立 Oracle Schema，也可以放在业务 Schema；只要 SQL 已初始化且 Starter 使用的 `DataSource` 用户可访问 `cost_*`、`sys_dict_type`、`sys_dict_data` 即可。
+
+### 3.1 复用宿主业务数据源
+
+把 SQL 执行到宿主业务 Schema，省略 `cost.lite.datasource.url`，Starter 默认复用 Bean 名称为 `dataSource` 的宿主数据源：
+
+```yaml
+cost:
+  lite:
+    embedded:
+      enabled: true
+    datasource:
+      host-bean-name: ${COST_LITE_HOST_DATASOURCE_BEAN:dataSource}
+```
+
+宿主使用其他数据源 Bean 名称时只调整 `host-bean-name`。
+
+### 3.2 使用专用计费库
+
+把 SQL 执行到专用 Schema 后，按下面配置专用 Oracle 连接：
 
 在业务项目外部配置文件或配置中心加入：
 
@@ -59,7 +78,7 @@ cost:
         validation-timeout: 3000
 ```
 
-数据库地址、账号和密码属于宿主外部配置，不写入 Jar、前端或 Git。Starter 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目自己的 `spring.datasource`。
+数据库地址、账号和密码属于宿主外部配置，不写入 Jar、前端或 Git。Starter 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目自己的 `spring.datasource`。省略专用 URL 即切换到宿主数据源。
 
 ## 4. 入口和前端
 
@@ -99,4 +118,4 @@ const costLiteApi = createCostLiteApi(
 
 ## 6. 老项目兼容方式
 
-传统 SSM、Spring Boot 2 但无法引入同进程 Starter，或需要独立进程隔离的项目，使用 `Oracle/backend-integration` 的 HTTP Client/Starter + `Oracle/runtime/cost-lite-server-1.0.0.jar`。这条路径不复制核心源码；前端使用 `routeMode: "proxy"`，由 HTTP Starter 转发到独立 Jar。
+传统 SSM、非 Spring Boot 宿主使用 `Oracle/backend-integration/cost-lite-client` 直接调用独立 Jar；Spring Boot 2.7 但无法引入同进程 Starter，才使用同目录的 HTTP Starter 代理。需要独立进程隔离的项目使用 `Oracle/runtime/cost-lite-server-1.0.0.jar`，不复制核心源码；前端直连 Jar 使用 `routeMode: "runtime"`，经过 HTTP Starter 才使用 `routeMode: "proxy"`。

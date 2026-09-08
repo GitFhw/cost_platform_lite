@@ -42,6 +42,9 @@ public final class CostLiteRouteKeys {
     public static final String VARIABLE_COPY = "variable-copy";
     public static final String VARIABLE_IMPORT_PREVIEW = "variable-import-preview";
     public static final String VARIABLE_IMPORT_DATA = "variable-import-data";
+    public static final String VARIABLE_REMOTE_TEST = "variable-remote-test";
+    public static final String VARIABLE_REMOTE_PREVIEW = "variable-remote-preview";
+    public static final String VARIABLE_REMOTE_REFRESH = "variable-remote-refresh";
     public static final String VARIABLE_DELETE = "variable-delete";
 
     public static final String VARIABLE_GROUP_LIST = "variable-group-list";

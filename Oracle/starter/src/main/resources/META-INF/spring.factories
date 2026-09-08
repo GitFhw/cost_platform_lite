@@ -1,2 +1,4 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.costplatform.lite.starter.CostLiteDedicatedDataSourceConfiguration,\
+com.costplatform.lite.starter.CostLiteHostDataSourceConfiguration,\
 com.costplatform.lite.starter.CostLiteAutoConfiguration

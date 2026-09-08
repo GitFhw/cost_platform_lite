@@ -88,6 +88,9 @@ public class DefaultCostLiteRouteResolver implements CostLiteRouteResolver {
         put(defaults, CostLiteRouteKeys.VARIABLE_COPY, "/cost/variable/copy");
         put(defaults, CostLiteRouteKeys.VARIABLE_IMPORT_PREVIEW, "/cost/variable/importPreview");
         put(defaults, CostLiteRouteKeys.VARIABLE_IMPORT_DATA, "/cost/variable/importData");
+        put(defaults, CostLiteRouteKeys.VARIABLE_REMOTE_TEST, "/cost/variable/remote/test");
+        put(defaults, CostLiteRouteKeys.VARIABLE_REMOTE_PREVIEW, "/cost/variable/remote/preview");
+        put(defaults, CostLiteRouteKeys.VARIABLE_REMOTE_REFRESH, "/cost/variable/remote/refresh");
         put(defaults, CostLiteRouteKeys.VARIABLE_DELETE, "/cost/variable/{variableIds}");
 
         put(defaults, CostLiteRouteKeys.VARIABLE_GROUP_LIST, "/cost/variable/group/list");

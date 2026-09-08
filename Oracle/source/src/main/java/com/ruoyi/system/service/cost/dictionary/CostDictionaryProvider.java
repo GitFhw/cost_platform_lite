@@ -3,8 +3,8 @@ package com.ruoyi.system.service.cost.dictionary;
 /**
  * 计费字典提供器。
  *
- * <p>母体默认对接若依系统字典，轻量运行时或业务系统可以提供自己的实现，
- * 从而避免计费服务直接依赖某一种系统字典表结构。</p>
+ * <p>轻量运行时默认读取当前计费库的字典表，业务系统也可以提供自己的实现，
+ * 从而避免计费服务直接依赖某一种宿主字典表结构。</p>
  */
 public interface CostDictionaryProvider {
     /**

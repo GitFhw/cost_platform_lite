@@ -7,8 +7,8 @@
     },
     {
       "name": "cost.lite.datasource",
-      "type": "com.zaxxer.hikari.HikariDataSource",
-      "description": "计费核心独立数据库连接。"
+      "type": "java.lang.Object",
+      "description": "计费数据源配置；未提供 URL 时复用宿主数据源，提供 URL 时创建专用计费连接池。"
     }
   ],
   "properties": [
@@ -16,12 +16,12 @@
       "name": "cost.lite.embedded.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "是否在当前宿主进程内自动注册计费 Controller、Service、Mapper 和独立数据源。"
+      "description": "是否在当前宿主进程内自动注册计费 Controller、Service、Mapper 和命名计费数据源。"
     },
     {
       "name": "cost.lite.datasource.url",
       "type": "java.lang.String",
-      "description": "计费数据库 JDBC URL。"
+      "description": "可选的计费数据库 JDBC URL；为空时复用 host-bean-name 指定的宿主数据源。"
     },
     {
       "name": "cost.lite.datasource.username",
@@ -39,6 +39,12 @@
       "description": "计费数据库 JDBC 驱动类名。"
     },
     {
+      "name": "cost.lite.datasource.host-bean-name",
+      "type": "java.lang.String",
+      "defaultValue": "dataSource",
+      "description": "未配置专用 JDBC URL 时复用的宿主 DataSource Bean 名称。"
+    },
+    {
       "name": "cost.lite.datasource.hikari.pool-name",
       "type": "java.lang.String",
       "defaultValue": "cost-lite-pool",
@@ -49,6 +55,18 @@
       "type": "java.lang.Integer",
       "defaultValue": 10,
       "description": "计费独立连接池最大连接数。"
+    },
+    {
+      "name": "cost.lite.formal-enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "是否启用正式核算任务、正式结果和结果追溯；启用前必须执行可选正式表脚本。"
+    },
+    {
+      "name": "cost.lite.open-api-enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "是否启用基于 cost_open_app 的跨系统令牌开放接口；启用前必须执行可选开放接口表脚本。"
     }
   ]
 }

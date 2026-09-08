@@ -25,7 +25,7 @@
         <fastjson.version>2.0.61</fastjson.version>
         <commons-io.version>2.21.0</commons-io.version>
         <poi.version>4.1.2</poi.version>
-        <yauaa.version>8.1.0</yauaa.version>
+        <yauaa.version>7.28.0</yauaa.version>
         <jjwt.version>0.9.1</jjwt.version>
         <jaxb.version>2.3.1</jaxb.version>
     </properties>
@@ -70,7 +70,7 @@
         </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <artifactId>mybatis-plus-jsqlparser-4.9</artifactId>
             <version>${mybatis-plus.version}</version>
         </dependency>
         <dependency>

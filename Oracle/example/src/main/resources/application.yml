@@ -6,7 +6,7 @@ spring:
   datasource:
     driver-class-name: ${COST_LITE_HOST_DB_DRIVER:oracle.jdbc.OracleDriver}
     url: ${COST_LITE_HOST_DB_URL:jdbc:oracle:thin:@127.0.0.1:1522/FREEPDB1}
-    username: ${COST_LITE_HOST_DB_USERNAME:root}
+    username: ${COST_LITE_HOST_DB_USERNAME:}
     password: ${COST_LITE_HOST_DB_PASSWORD:}
 
 server:
@@ -22,6 +22,8 @@ cost:
     auth-enabled: false
     operator: ${COST_LITE_OPERATOR:lite-example}
     persist-billing-log: true
+    formal-enabled: false
+    open-api-enabled: false
     plugin-enabled: false
     dictionary:
       provider: ${COST_LITE_DICTIONARY_PROVIDER:SYSTEM}
@@ -29,8 +31,8 @@ cost:
       allow-unconfigured-types: ${COST_LITE_DICTIONARY_ALLOW_UNCONFIGURED_TYPES:true}
     datasource:
       driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
-      url: ${COST_LITE_DB_URL:jdbc:oracle:thin:@127.0.0.1:1522/FREEPDB1}
-      username: ${COST_LITE_DB_USERNAME:root}
+      url: ${COST_LITE_DB_URL:}
+      username: ${COST_LITE_DB_USERNAME:}
       password: ${COST_LITE_DB_PASSWORD:}
       hikari:
         pool-name: cost-lite-embedded-example-pool
@@ -44,7 +46,7 @@ logging:
   level:
     root: INFO
     com.costplatform.lite: INFO
-    com.ruoyi.lite: INFO
-    com.ruoyi.system.service.impl.cost: INFO
+    com.costplatform.lite.internal.ruoyi.lite: INFO
+    com.costplatform.lite.internal.ruoyi.system.service.impl.cost: INFO
     org.springframework.jdbc: WARN
     org.mybatis: WARN

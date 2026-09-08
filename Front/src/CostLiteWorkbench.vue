@@ -36,7 +36,9 @@ import {
   type CostLiteApi,
   type CostLiteRecord,
   type CostLiteDictionary,
+  type CostLitePage,
 } from "./costLiteApi";
+import ConditionValueEditor from "./ConditionValueEditor.vue";
 
 const DICTIONARY_TYPES = [
   "cost_business_domain",
@@ -146,6 +148,13 @@ const selectedScene = computed(() =>
 const selectedFee = computed(() =>
   fees.value.find((item) => String(item.feeId) === String(selectedFeeId.value)),
 );
+const variableMetaMap = computed<Record<string, CostLiteRecord>>(() => {
+  const result: Record<string, CostLiteRecord> = {};
+  variables.value.forEach((item) => {
+    if (item.variableCode) result[String(item.variableCode)] = item;
+  });
+  return result;
+});
 const activeVersionId = computed(() => selectedScene.value?.activeVersionId);
 const activeVersion = computed(() =>
   versions.value.find((item) => String(item.versionId) === String(activeVersionId.value)),
@@ -320,6 +329,26 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+async function loadAllPages(
+  fetchPage: (params: CostLiteRecord) => Promise<CostLitePage>,
+): Promise<CostLiteRecord[]> {
+  const pageSize = Math.max(1, Number(props.pageSize) || 100);
+  const rows: CostLiteRecord[] = [];
+  let pageNum = 1;
+  let total = 0;
+  while (pageNum <= 10000) {
+    const page = await fetchPage({ pageNum, pageSize });
+    const currentRows = Array.isArray(page.rows) ? page.rows : [];
+    rows.push(...currentRows);
+    total = Number(page.total);
+    if (!currentRows.length) break;
+    if (Number.isFinite(total) && total > 0 && rows.length >= total) break;
+    if (total <= 0 && currentRows.length < pageSize) break;
+    pageNum += 1;
+  }
+  return rows;
+}
+
 async function confirmAction(message: string, title: string, options: CostLiteRecord = {}): Promise<boolean> {
   try {
     await ElMessageBox.confirm(message, title, { type: "warning", ...options });
@@ -416,9 +445,9 @@ async function loadScenes(
   const requestId = ++sceneRequestId;
   loading.scenes = true;
   try {
-    const page = await api().listScenes({ pageNum: 1, pageSize: props.pageSize });
+    const sceneRows = await loadAllPages((params) => api().listScenes(params));
     if (requestId !== sceneRequestId) return;
-    scenes.value = page.rows;
+    scenes.value = sceneRows;
     const codeTarget = preferredSceneCode
       ? scenes.value.find((item) => String(item.sceneCode) === String(preferredSceneCode))?.sceneId
       : undefined;
@@ -467,19 +496,29 @@ async function loadSceneContext(
   const requestId = ++contextRequestId;
   loading.context = true;
   try {
-    const [feePage, variablePage, groups, versionPage, formulas] = await Promise.all([
-      api().listFees(sceneId, { pageNum: 1, pageSize: props.pageSize }),
-      api().listVariables(sceneId, { pageNum: 1, pageSize: props.pageSize }),
+    const [feeRows, variableRows, groups, versionRows, formulas] = await Promise.all([
+      loadAllPages((params) => api().listFees(sceneId, params)),
+      loadAllPages((params) => api().listVariables(sceneId, params)),
       api().listVariableGroups(sceneId),
-      api().listVersions(sceneId, { pageNum: 1, pageSize: props.pageSize }),
+      loadAllPages((params) => api().listVersions(sceneId, params)),
       api().listFormulaOptions(sceneId),
     ]);
     if (requestId !== contextRequestId || String(sceneId) !== String(selectedSceneId.value)) return;
-    fees.value = feePage.rows;
-    variables.value = variablePage.rows;
+    fees.value = feeRows;
+    variables.value = variableRows;
     variableGroups.value = groups;
-    versions.value = versionPage.rows;
+    versions.value = versionRows;
     formulaOptions.value = formulas;
+    const dynamicDictTypes = Array.from(new Set(
+      variableRows
+        .map((item) => String(item.dictType || "").trim())
+        .filter((item) => item && !dictionaryOptions.value[item]),
+    ));
+    if (dynamicDictTypes.length) {
+      const dynamicDictionaries = await api().listDictionaries(dynamicDictTypes);
+      if (requestId !== contextRequestId || String(sceneId) !== String(selectedSceneId.value)) return;
+      dictionaryOptions.value = { ...dictionaryOptions.value, ...dynamicDictionaries };
+    }
     const codeTarget = preferredFeeCode
       ? fees.value.find((item) => String(item.feeCode) === String(preferredFeeCode))?.feeId
       : undefined;
@@ -511,15 +550,12 @@ async function loadRules(): Promise<void> {
   const requestId = ++rulesRequestId;
   loading.rules = true;
   try {
-    const [page, governance] = await Promise.all([
-      api().listRules(selectedSceneId.value, selectedFeeId.value, {
-        pageNum: 1,
-        pageSize: props.pageSize,
-      }),
+    const [ruleRows, governance] = await Promise.all([
+      loadAllPages((params) => api().listRules(selectedSceneId.value!, selectedFeeId.value!, params)),
       api().getFeeGovernance(selectedFeeId.value),
     ]);
     if (requestId !== rulesRequestId) return;
-    rules.value = page.rows;
+    rules.value = ruleRows;
     feeGovernance.value = governance;
   } catch (error) {
     if (requestId === rulesRequestId) {
@@ -863,6 +899,7 @@ async function deleteVariableGroup(group: CostLiteRecord): Promise<void> {
 const ruleDialogVisible = ref(false);
 const ruleFormRef = ref<FormInstance>();
 const ruleForm = reactive<CostLiteRecord>({});
+const rulePreviewInputJson = ref("{}");
 const ruleRules: FormRules = {
   ruleCode: [{ required: true, message: "请输入规则编码", trigger: "blur" }],
   ruleName: [{ required: true, message: "请输入规则名称", trigger: "blur" }],
@@ -971,6 +1008,10 @@ async function openRuleDialog(rule?: CostLiteRecord): Promise<void> {
         }))
         : [],
     });
+    rulePreviewInputJson.value = formatJsonValue(
+      source.previewInputJson,
+      buildRulePreviewInput(source),
+    );
     ruleDialogVisible.value = true;
     if (ruleForm.pricingMode === "GROUPED") syncGroupedPricingConfig();
   } catch (error) {
@@ -980,8 +1021,171 @@ async function openRuleDialog(rule?: CostLiteRecord): Promise<void> {
   }
 }
 
+function buildRulePreviewInput(source: CostLiteRecord): string {
+  const input: CostLiteRecord = {};
+  const quantityCode = String(source.quantityVariableCode || "").trim();
+  if (quantityCode) input[quantityCode] = 1;
+  const conditions = Array.isArray(source.conditions) ? source.conditions : [];
+  conditions.forEach((condition: CostLiteRecord) => {
+    const variableCode = String(condition.variableCode || "").trim();
+    if (!variableCode || Object.prototype.hasOwnProperty.call(input, variableCode)) return;
+    const operator = String(condition.operatorCode || "").toUpperCase();
+    if (operator === "IS_NULL") {
+      input[variableCode] = null;
+      return;
+    }
+    if (operator === "IS_NOT_NULL") {
+      input[variableCode] = "已填写";
+      return;
+    }
+    const values = String(condition.compareValue ?? "")
+      .replace(/，/g, ",")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const rawValue = values[0] || "";
+    const variable = variables.value.find((item) => String(item.variableCode) === variableCode);
+    const dataType = String(variable?.dataType || variable?.variableType || "").toUpperCase();
+    if (["NUMBER", "DECIMAL", "INTEGER", "LONG", "DOUBLE", "BIGDECIMAL"].includes(dataType)) {
+      const numberValue = Number(rawValue);
+      input[variableCode] = Number.isFinite(numberValue) ? numberValue : 1;
+    } else if (["BOOLEAN", "BOOL"].includes(dataType)) {
+      input[variableCode] = rawValue.toLowerCase() === "true";
+    } else {
+      input[variableCode] = rawValue || "SAMPLE";
+    }
+  });
+  return JSON.stringify(input, null, 2);
+}
+
+function handleRuleTypeChange(ruleType: string): void {
+  if (!ruleForm.pricingConfig) ruleForm.pricingConfig = {};
+  if (ruleType !== "FIXED_RATE") ruleForm.pricingConfig.rateValue = undefined;
+  if (ruleType !== "FIXED_AMOUNT") ruleForm.pricingConfig.amountValue = undefined;
+  if (ruleType !== "FIXED_RATE" && ruleType !== "FIXED_AMOUNT") {
+    ruleForm.pricingConfig.groupPrices = [];
+  }
+  if (ruleType !== "FORMULA") {
+    ruleForm.amountFormulaCode = "";
+    ruleForm.amountFormula = "";
+  }
+  if (ruleType !== "TIER_RATE") {
+    ruleForm.tiers = [];
+  } else if (!Array.isArray(ruleForm.tiers) || !ruleForm.tiers.length) {
+    ruleForm.tiers = [newTier(0)];
+  }
+  if (ruleType !== "FIXED_RATE" && ruleType !== "TIER_RATE") {
+    ruleForm.quantityVariableCode = "";
+  }
+  syncGroupedPricingConfig();
+}
+
 function variableName(code: unknown): string {
   return variables.value.find((item) => item.variableCode === code)?.variableName || String(code || "");
+}
+
+async function handleConditionVariableChange(condition: CostLiteRecord, variableCode: string): Promise<void> {
+  const meta = variableMetaMap.value[String(variableCode || "")];
+  condition.displayName = condition.displayName || meta?.variableName || variableCode;
+  condition.compareValue = "";
+  const dictType = String(meta?.dictType || "").trim();
+  if (!dictType || dictionaryOptions.value[dictType]) return;
+  try {
+    const dynamicDictionaries = await api().listDictionaries([dictType]);
+    dictionaryOptions.value = { ...dictionaryOptions.value, ...dynamicDictionaries };
+  } catch (error) {
+    ElMessage.warning(errorMessage(error, `字典 ${dictType} 加载失败，当前按编码输入`));
+  }
+}
+
+function handleConditionOperatorChange(condition: CostLiteRecord, operatorCode: string): void {
+  const normalizedOperator = String(operatorCode || "").toUpperCase();
+  if (!["IN", "NOT_IN"].includes(normalizedOperator)
+    && typeof condition.compareValue === "string"
+    && condition.compareValue.includes(",")) {
+    condition.compareValue = condition.compareValue
+      .split(",")
+      .map((item: string) => item.trim())
+      .filter(Boolean)[0] || "";
+  }
+  if (["IS_NULL", "IS_NOT_NULL"].includes(normalizedOperator)) {
+    condition.compareValue = "";
+  }
+}
+
+function buildRemoteVariableRequest(source: CostLiteRecord): CostLiteRecord {
+  const payload: CostLiteRecord = {
+    variableId: source.variableId,
+    variableCode: source.variableCode,
+    sourceSystem: source.sourceSystem,
+    remoteApi: source.remoteApi,
+    requestMethod: source.requestMethod,
+    contentType: source.contentType,
+    queryConfigJson: source.queryConfigJson,
+    requestHeadersJson: source.requestHeadersJson,
+    bodyTemplateJson: source.bodyTemplateJson,
+    authType: source.authType,
+    authConfigJson: source.authConfigJson,
+    dataPath: source.dataPath,
+    responseConfigJson: source.responseConfigJson,
+    mappingConfigJson: source.mappingConfigJson,
+    pageConfigJson: source.pageConfigJson,
+    adapterType: source.adapterType,
+    adapterConfigJson: source.adapterConfigJson,
+    syncMode: source.syncMode,
+    cachePolicy: source.cachePolicy,
+    fallbackPolicy: source.fallbackPolicy,
+  };
+  if (typeof payload.authConfigJson === "string" && payload.authConfigJson.includes('"masked"')) {
+    delete payload.authConfigJson;
+  }
+  return payload;
+}
+
+async function testRemoteVariable(): Promise<void> {
+  if (!api().testRemoteVariable) return;
+  loading.detail = true;
+  try {
+    const result = await api().testRemoteVariable(buildRemoteVariableRequest(variableForm));
+    openJsonDetail("远程要素接口测试", result);
+    if (result.success) ElMessage.success(result.message || "第三方接口调用成功");
+    else ElMessage.warning(result.message || "第三方接口调用失败");
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "第三方接口测试失败"));
+  } finally {
+    loading.detail = false;
+  }
+}
+
+async function previewRemoteVariable(): Promise<void> {
+  if (!api().previewRemoteVariable) return;
+  loading.detail = true;
+  try {
+    const result = await api().previewRemoteVariable(buildRemoteVariableRequest(variableForm));
+    openJsonDetail("远程要素数据预览", result);
+    if (result.success) ElMessage.success(result.message || "第三方数据预览成功");
+    else ElMessage.warning(result.message || "第三方数据预览失败");
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "第三方数据预览失败"));
+  } finally {
+    loading.detail = false;
+  }
+}
+
+async function refreshRemoteVariables(): Promise<void> {
+  if (!api().refreshRemoteVariables || !selectedSceneId.value) return;
+  loading.detail = true;
+  try {
+    const result = await api().refreshRemoteVariables(selectedSceneId.value);
+    openJsonDetail("远程要素刷新检查", result);
+    ElMessage[result.cacheRefreshSupported === false ? "warning" : "success"](
+      result.message || "远程要素刷新检查完成",
+    );
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "远程要素刷新检查失败"));
+  } finally {
+    loading.detail = false;
+  }
 }
 
 function addCondition(targetGroupNo?: number): void {
@@ -1201,9 +1405,16 @@ async function saveRule(): Promise<void> {
 async function previewRule(): Promise<void> {
   const rule = buildRulePayload();
   if (!validateRuleEditor(rule)) return;
+  let inputValues: unknown;
+  try {
+    inputValues = parseJsonObject(rulePreviewInputJson.value, "规则预览样例");
+  } catch (error) {
+    ElMessage.error((error as Error).message);
+    return;
+  }
   loading.detail = true;
   try {
-    const result = await api().previewRule({ rule, inputValues: {} });
+    const result = await api().previewRule({ rule, inputValues });
     openJsonDetail("规则预览", result);
   } catch (error) {
     ElMessage.error(errorMessage(error, "规则预览失败"));
@@ -1280,8 +1491,8 @@ async function openFormulaDialog(formula?: CostLiteRecord): Promise<void> {
     businessFormula: formula?.businessFormula || "",
     formulaExpr: formula?.formulaExpr || "",
     assetType: "FORMULA",
-    workbenchMode: "GUIDED",
-    workbenchPattern: "IF_ELSE",
+    workbenchMode: formula?.workbenchMode || "GUIDED",
+    workbenchPattern: formula?.workbenchPattern || "IF_ELSE",
     templateCode: formula?.templateCode || "",
     workbenchConfigJson: formula?.workbenchConfigJson || "",
     namespaceScope: formula?.namespaceScope || "V,C,I,F,T",
@@ -1313,8 +1524,8 @@ function buildFormulaPayload(): CostLiteRecord {
   const payload = JSON.parse(JSON.stringify(formulaForm));
   payload.sceneId = selectedSceneId.value;
   payload.assetType = "FORMULA";
-  payload.workbenchMode = "GUIDED";
-  payload.workbenchPattern = "IF_ELSE";
+  payload.workbenchMode = payload.workbenchMode || "GUIDED";
+  payload.workbenchPattern = payload.workbenchPattern || "IF_ELSE";
   payload.namespaceScope = String(payload.namespaceScope || "V,C,I,F,T").trim();
   payload.formulaCode = String(payload.formulaCode || "").trim();
   payload.formulaName = String(payload.formulaName || "").trim();
@@ -1535,6 +1746,51 @@ async function rollbackVersion(version: CostLiteRecord): Promise<void> {
     await loadSceneContext();
   } catch (error) {
     ElMessage.error(errorMessage(error, "版本回退失败"));
+  }
+}
+
+async function showPublishVersion(version: CostLiteRecord): Promise<void> {
+  if (!api().getVersion) {
+    openJsonDetail(`发布版本 V${version.versionNo || version.versionId}`, version);
+    return;
+  }
+  loading.detail = true;
+  try {
+    openJsonDetail(
+      `发布版本 V${version.versionNo || version.versionId}`,
+      await api().getVersion!(version.versionId),
+    );
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "发布版本详情加载失败"));
+  } finally {
+    loading.detail = false;
+  }
+}
+
+async function showPublishDiff(version: CostLiteRecord): Promise<void> {
+  if (!api().getPublishDiff) return;
+  const previousVersionId = version.previousVersionId
+    || versions.value
+      .filter((item) => Number(item.versionId) < Number(version.versionId))
+      .sort((left, right) => Number(right.versionId) - Number(left.versionId))[0]?.versionId;
+  if (!previousVersionId) {
+    ElMessage.info("当前版本没有上一版可对比");
+    return;
+  }
+  loading.detail = true;
+  try {
+    const diff = await api().getPublishDiff!({
+      fromVersionId: previousVersionId,
+      toVersionId: version.versionId,
+    });
+    openJsonDetail(
+      `版本差异 ${version.previousVersionNo || previousVersionId} → ${version.versionNo || version.versionId}`,
+      diff,
+    );
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "版本差异加载失败"));
+  } finally {
+    loading.detail = false;
   }
 }
 
@@ -1837,6 +2093,26 @@ onMounted(initialize);
           <small>{{ versionStatusText(version) }}</small>
           <span class="version-item-actions" @click.stop>
             <el-button
+              v-if="api().getVersion"
+              link
+              type="info"
+              size="small"
+              :icon="View"
+              title="查看版本详情"
+              aria-label="查看版本详情"
+              @click="showPublishVersion(version)"
+            />
+            <el-button
+              v-if="api().getPublishDiff && (version.previousVersionId || versions.length > 1)"
+              link
+              type="info"
+              size="small"
+              :icon="CopyDocument"
+              title="查看与上一版的差异"
+              aria-label="查看与上一版的差异"
+              @click="showPublishDiff(version)"
+            />
+            <el-button
               v-if="String(version.versionId) !== String(activeVersionId) && version.versionStatus !== 'ROLLED_BACK'"
               link
               type="primary"
@@ -1921,6 +2197,14 @@ onMounted(initialize);
               title="要素分组"
               :disabled="!selectedSceneId"
               @click="groupDialogVisible = true"
+            />
+            <el-button
+              v-if="centerTab === 'variables' && api().refreshRemoteVariables"
+              :icon="Refresh"
+              circle
+              title="检查远程要素"
+              :disabled="!selectedSceneId"
+              @click="refreshRemoteVariables"
             />
             <el-button
               type="primary"
@@ -2287,6 +2571,10 @@ onMounted(initialize);
           </template>
           <template v-if="variableForm.sourceType === 'REMOTE'">
             <el-form-item label="远程接口" class="span-2"><el-input v-model="variableForm.remoteApi" /></el-form-item>
+            <div class="remote-editor-actions span-2">
+              <el-button v-if="api().testRemoteVariable" :icon="Connection" :loading="loading.detail" @click="testRemoteVariable">测试接口</el-button>
+              <el-button v-if="api().previewRemoteVariable" :icon="View" :loading="loading.detail" @click="previewRemoteVariable">预览数据</el-button>
+            </div>
             <el-form-item label="请求方式">
               <el-select v-model="variableForm.requestMethod">
                 <el-option label="GET" value="GET" /><el-option label="POST" value="POST" />
@@ -2377,7 +2665,7 @@ onMounted(initialize);
           <el-form-item label="规则编码" prop="ruleCode"><el-input v-model="ruleForm.ruleCode" /></el-form-item>
           <el-form-item label="规则名称" prop="ruleName"><el-input v-model="ruleForm.ruleName" /></el-form-item>
           <el-form-item label="规则类型" prop="ruleType">
-            <el-select v-model="ruleForm.ruleType">
+            <el-select v-model="ruleForm.ruleType" @change="handleRuleTypeChange">
               <el-option v-for="item in dictOptions('cost_rule_type')" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
@@ -2388,7 +2676,7 @@ onMounted(initialize);
               <el-option label="按条件组定价" value="GROUPED" />
             </el-select>
           </el-form-item>
-          <el-form-item v-if="['FIXED_RATE','TIER_RATE'].includes(ruleForm.ruleType)" label="计量要素"><el-select v-model="ruleForm.quantityVariableCode" filterable><el-option v-for="item in variables" :key="item.variableCode" :label="`${item.variableName} (${item.variableCode})`" :value="item.variableCode" /></el-select></el-form-item>
+          <el-form-item v-if="['FIXED_RATE','TIER_RATE'].includes(ruleForm.ruleType)" label="计量要素（单选）"><el-select v-model="ruleForm.quantityVariableCode" filterable><el-option v-for="item in variables" :key="item.variableCode" :label="`${item.variableName} (${item.variableCode})`" :value="item.variableCode" /></el-select></el-form-item>
           <el-form-item v-if="ruleForm.ruleType === 'FIXED_RATE' && ruleForm.pricingMode !== 'GROUPED'" label="费率"><el-input-number v-model="ruleForm.pricingConfig.rateValue" :precision="6" :min="0" /></el-form-item>
           <el-form-item v-if="ruleForm.ruleType === 'FIXED_AMOUNT' && ruleForm.pricingMode !== 'GROUPED'" label="固定金额"><el-input-number v-model="ruleForm.pricingConfig.amountValue" :precision="2" /></el-form-item>
           <el-form-item v-if="ruleForm.ruleType === 'FORMULA'" label="公式编码"><el-select v-model="ruleForm.amountFormulaCode" clearable filterable><el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaName || item.formulaCode} (${item.formulaCode})`" :value="item.formulaCode" /></el-select></el-form-item>
@@ -2432,21 +2720,26 @@ onMounted(initialize);
             <el-table :data="group.items" size="small" border>
               <el-table-column label="要素" min-width="230">
                 <template #default="{ row }">
-                  <el-select v-model="row.condition.variableCode" filterable>
+                  <el-select v-model="row.condition.variableCode" filterable @change="handleConditionVariableChange(row.condition, $event)">
                     <el-option v-for="item in variables" :key="item.variableCode" :label="`${item.variableName} (${item.variableCode})`" :value="item.variableCode" />
                   </el-select>
                 </template>
               </el-table-column>
               <el-table-column label="操作符" width="160">
                 <template #default="{ row }">
-                  <el-select v-model="row.condition.operatorCode">
+                  <el-select v-model="row.condition.operatorCode" @change="handleConditionOperatorChange(row.condition, $event)">
                     <el-option v-for="item in dictOptions('cost_rule_operator')" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
                 </template>
               </el-table-column>
               <el-table-column label="比较值" min-width="190">
                 <template #default="{ row }">
-                  <el-input v-model="row.condition.compareValue" :disabled="['IS_NULL','IS_NOT_NULL'].includes(row.condition.operatorCode)" />
+                  <ConditionValueEditor
+                    v-model="row.condition.compareValue"
+                    :operator-code="row.condition.operatorCode"
+                    :variable-meta="variableMetaMap[row.condition.variableCode] || {}"
+                    :dict-options-map="dictionaryOptions"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="64">
@@ -2487,6 +2780,21 @@ onMounted(initialize);
           <el-table-column label="区间" width="190"><template #default="{ row }"><el-select v-model="row.intervalMode"><el-option v-for="item in dictOptions('cost_rule_interval_mode')" :key="item.value" :label="item.label" :value="item.value" /></el-select></template></el-table-column>
           <el-table-column label="操作" width="64"><template #default="{ $index }"><el-button link type="danger" :icon="Delete" title="删除阶梯" @click="removeTier($index)" /></template></el-table-column>
         </el-table>
+      </div>
+      <div class="editor-section rule-preview-input">
+        <div class="editor-section-header">
+          <div>
+            <strong>规则试算样例</strong>
+            <span class="condition-group-note">按变量编码填写输入值；保存规则前可先验证条件组、计量值和金额。</span>
+          </div>
+        </div>
+        <el-input
+          v-model="rulePreviewInputJson"
+          type="textarea"
+          :rows="4"
+          spellcheck="false"
+          placeholder='例如：{"tradeType":"OUT","quantity":1}'
+        />
       </div>
       <template #footer><el-button :icon="View" @click="previewRule">预览</el-button><el-button @click="ruleDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" @click="saveRule">保存</el-button></template>
     </el-dialog>
@@ -3347,6 +3655,12 @@ onMounted(initialize);
 
 .dialog-grid .span-2 {
   grid-column: 1 / -1;
+}
+
+.remote-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin: -2px 0 4px;
 }
 
 .dialog-grid :deep(.el-select),

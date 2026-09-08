@@ -5,6 +5,7 @@ import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.common.core.domain.BaseEntity;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.lite.config.CostLiteProperties;
 import com.ruoyi.system.domain.cost.*;
 import com.ruoyi.system.domain.cost.bo.CostSceneCopyBo;
 import com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo;
@@ -34,6 +35,9 @@ public class CostSceneServiceImpl implements ICostSceneService {
 
     @Autowired
     private CostDictionaryProvider dictionaryProvider;
+
+    @Autowired
+    private CostLiteProperties liteProperties;
 
     @Autowired
     private CostGovernanceImpactSupport governanceImpactSupport;
@@ -157,7 +161,9 @@ public class CostSceneServiceImpl implements ICostSceneService {
         check.setDisableAdvice(check.getCanDisable() ? buildDisableAdvice(check)
                 : "请先处理当前生效版本、已发布版本、运行中任务或结果台账后，再执行停用。");
         check.setImpactItems(governanceImpactSupport.buildSceneImpacts(check));
-        check.setRecentTasks(sceneMapper.selectRecentSceneTasks(sceneId));
+        check.setRecentTasks(liteProperties.isFormalEnabled()
+                ? sceneMapper.selectRecentSceneTasks(sceneId)
+                : Collections.emptyList());
         return check;
     }
 

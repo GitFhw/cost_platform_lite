@@ -542,7 +542,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
             Optional<CostAuditLog> latest = audits.stream()
                     .filter(item -> versionId == null || String.valueOf(versionId).equals(item.getObjectCode()))
                     .findFirst();
-            if (latest.isEmpty()) {
+            if (!latest.isPresent()) {
                 return Collections.emptyMap();
             }
             CostAuditLog audit = latest.get();

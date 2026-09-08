@@ -2,6 +2,7 @@ package com.ruoyi.lite.controller;
 
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
+import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.lite.config.CostLiteProperties;
 import com.ruoyi.lite.service.CostLiteBillingService;
 import com.ruoyi.lite.web.CostLiteControllerSupport;
@@ -81,33 +82,39 @@ public class CostLiteRunController extends CostLiteControllerSupport {
 
     @GetMapping("/task/stats")
     public AjaxResult taskStats(CostCalcTask query) {
+        requireFormalEnabled();
         return success(runService.selectTaskStats(query));
     }
 
     @GetMapping("/task/overview")
     public AjaxResult taskOverview(CostCalcTask query) {
+        requireFormalEnabled();
         return success(runService.selectTaskOverview(query));
     }
 
     @GetMapping("/task/list")
     public TableDataInfo taskList(CostCalcTask query,
-                                  @RequestParam(value = "pageNum", required = false) Integer pageNum,
-                                  @RequestParam(value = "pageSize", required = false) Integer pageSize) {
+                                        @RequestParam(value = "pageNum", required = false) Integer pageNum,
+                                        @RequestParam(value = "pageSize", required = false) Integer pageSize) {
+        requireFormalEnabled();
         return CostLiteTableSupport.table(runService.selectTaskList(query), pageNum, pageSize, properties);
     }
 
     @PostMapping("/task/precheck")
     public AjaxResult precheckTask(@RequestBody CostCalcTaskSubmitBo request) {
+        requireFormalEnabled();
         return success(runService.precheckTask(request));
     }
 
     @PostMapping("/task/submit")
     public AjaxResult submitTask(@Valid @RequestBody CostCalcTaskSubmitBo request) {
+        requireFormalEnabled();
         return success(runService.submitTask(request));
     }
 
     @PostMapping("/task/input-batch")
     public AjaxResult createInputBatch(@Valid @RequestBody CostCalcInputBatchCreateBo request) {
+        requireFormalEnabled();
         return success(runService.createInputBatch(request));
     }
 
@@ -115,6 +122,7 @@ public class CostLiteRunController extends CostLiteControllerSupport {
     public TableDataInfo inputBatchList(CostCalcInputBatch query,
                                         @RequestParam(value = "pageNum", required = false) Integer pageNum,
                                         @RequestParam(value = "pageSize", required = false) Integer pageSize) {
+        requireFormalEnabled();
         return CostLiteTableSupport.table(runService.selectInputBatchList(query), pageNum, pageSize, properties);
     }
 
@@ -122,6 +130,7 @@ public class CostLiteRunController extends CostLiteControllerSupport {
     public AjaxResult inputBatchDetail(@PathVariable Long batchId,
                                        @RequestParam(defaultValue = "1") Integer pageNum,
                                        @RequestParam(defaultValue = "20") Integer pageSize) {
+        requireFormalEnabled();
         return success(runService.selectInputBatchDetail(batchId, pageNum, pageSize));
     }
 
@@ -129,31 +138,37 @@ public class CostLiteRunController extends CostLiteControllerSupport {
     public AjaxResult taskDetail(@PathVariable Long taskId,
                                  @RequestParam(defaultValue = "1") Integer pageNum,
                                  @RequestParam(defaultValue = "20") Integer pageSize) {
+        requireFormalEnabled();
         return success(runService.selectTaskDetail(taskId, pageNum, pageSize));
     }
 
     @PutMapping("/task/retry/{detailId}")
     public AjaxResult retryTaskDetail(@PathVariable Long detailId) {
+        requireFormalEnabled();
         return toAjax(runService.retryTaskDetail(detailId));
     }
 
     @PutMapping("/task/partition/retry/{partitionId}")
     public AjaxResult retryTaskPartition(@PathVariable Long partitionId) {
+        requireFormalEnabled();
         return toAjax(runService.retryTaskPartition(partitionId));
     }
 
     @PutMapping("/task/cancel/{taskId}")
     public AjaxResult cancelTask(@PathVariable Long taskId) {
+        requireFormalEnabled();
         return toAjax(runService.cancelTask(taskId));
     }
 
     @GetMapping("/result/stats")
     public AjaxResult resultStats(CostResultLedger query) {
+        requireFormalEnabled();
         return success(runService.selectResultStats(query));
     }
 
     @GetMapping("/result/compare")
     public AjaxResult resultCompare(com.ruoyi.system.domain.cost.bo.CostResultCompareBo query) {
+        requireFormalEnabled();
         return success(runService.selectResultCompare(query));
     }
 
@@ -161,16 +176,19 @@ public class CostLiteRunController extends CostLiteControllerSupport {
     public TableDataInfo resultList(CostResultLedger query,
                                     @RequestParam(value = "pageNum", required = false) Integer pageNum,
                                     @RequestParam(value = "pageSize", required = false) Integer pageSize) {
+        requireFormalEnabled();
         return CostLiteTableSupport.table(runService.selectResultList(query), pageNum, pageSize, properties);
     }
 
     @GetMapping("/result/{resultId}")
     public AjaxResult resultDetail(@PathVariable Long resultId) {
+        requireFormalEnabled();
         return success(runService.selectResultDetail(resultId));
     }
 
     @GetMapping("/trace/{traceId}")
     public AjaxResult traceDetail(@PathVariable Long traceId) {
+        requireFormalEnabled();
         return success(runService.selectTraceDetail(traceId));
     }
 
@@ -217,5 +235,11 @@ public class CostLiteRunController extends CostLiteControllerSupport {
             }
         }
         return ids;
+    }
+
+    private void requireFormalEnabled() {
+        if (!properties.isFormalEnabled()) {
+            throw new ServiceException("正式核算能力未启用；如需开放正式任务、正式结果和结果追溯，请先初始化可选正式表并设置 cost.lite.formal-enabled=true");
+        }
     }
 }

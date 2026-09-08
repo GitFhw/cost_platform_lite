@@ -306,6 +306,8 @@ public class CostLiteOracleSqlInterceptor implements Interceptor {
                 return convertConcat(body);
             case "group_concat":
                 return convertGroupConcat(body);
+            case "date_format":
+                return convertDateFormat(body);
             case "cast":
                 return convertCast(body);
             default:
@@ -327,7 +329,9 @@ public class CostLiteOracleSqlInterceptor implements Interceptor {
 
     private static String convertGroupConcat(String body) {
         String expression = body.trim();
+        boolean distinct = false;
         if (startsWithKeyword(expression, "distinct")) {
+            distinct = true;
             expression = expression.substring(8).trim();
         }
 
@@ -344,7 +348,39 @@ public class CostLiteOracleSqlInterceptor implements Interceptor {
             orderBy = expression.substring(orderPos + 8).trim();
             expression = expression.substring(0, orderPos).trim();
         }
-        return "LISTAGG(" + expression + "," + separator + ") WITHIN GROUP (ORDER BY " + orderBy + ")";
+        return "LISTAGG(" + (distinct ? "DISTINCT " : "") + expression + "," + separator
+                + ") WITHIN GROUP (ORDER BY " + orderBy + ")";
+    }
+
+    private static String convertDateFormat(String body) {
+        List<String> arguments = splitTopLevel(body, ',');
+        if (arguments.size() < 2) {
+            return "TO_CHAR(" + body + ")";
+        }
+        String expression = arguments.get(0).trim();
+        String pattern = convertDatePattern(arguments.get(1).trim());
+        return "TO_CHAR(" + expression + "," + pattern + ")";
+    }
+
+    private static String convertDatePattern(String pattern) {
+        if (pattern.length() < 2 || pattern.charAt(0) != '\''
+                || pattern.charAt(pattern.length() - 1) != '\'') {
+            return pattern;
+        }
+        String value = pattern.substring(1, pattern.length() - 1);
+        value = value.replace("%Y", "YYYY")
+                .replace("%y", "YY")
+                .replace("%m", "MM")
+                .replace("%c", "FMMM")
+                .replace("%d", "DD")
+                .replace("%e", "FMDD")
+                .replace("%H", "HH24")
+                .replace("%h", "HH12")
+                .replace("%I", "HH12")
+                .replace("%i", "MI")
+                .replace("%s", "SS")
+                .replace("%T", "HH24:MI:SS");
+        return "'" + value.replace("'", "''") + "'";
     }
 
     private static String convertCast(String body) {
@@ -367,6 +403,7 @@ public class CostLiteOracleSqlInterceptor implements Interceptor {
                 || "sysdate".equals(normalizedName)
                 || "concat".equals(normalizedName)
                 || "group_concat".equals(normalizedName)
+                || "date_format".equals(normalizedName)
                 || "cast".equals(normalizedName);
     }
 

@@ -58,6 +58,9 @@ export interface CostLiteApi {
   copyVariable?(data: CostLiteRecord): Promise<CostLiteRecord>;
   updateVariable(data: CostLiteRecord): Promise<unknown>;
   deleteVariables(variableIds: Array<number | string>): Promise<unknown>;
+  testRemoteVariable?(data: CostLiteRecord): Promise<CostLiteRecord>;
+  previewRemoteVariable?(data: CostLiteRecord): Promise<CostLiteRecord>;
+  refreshRemoteVariables?(sceneId?: number | string): Promise<CostLiteRecord>;
 
   listVariableGroups(sceneId: number | string): Promise<CostLiteRecord[]>;
   createVariableGroup(data: CostLiteRecord): Promise<unknown>;
@@ -259,6 +262,24 @@ export function createCostLiteApi(
     copyVariable: async (data) => recordOf(await request("POST", route("/variables/copy", "/variable/copy"), undefined, data)),
     updateVariable: (data) => send("PUT", route("/variables", "/variable"), data),
     deleteVariables: (variableIds) => send("DELETE", route(`/variables/${variableIds.join(",")}`, `/variable/${variableIds.join(",")}`)),
+    testRemoteVariable: async (data) => recordOf(await request(
+      "POST",
+      route("/variables/remote/test", "/variable/remote/test"),
+      undefined,
+      data,
+    )),
+    previewRemoteVariable: async (data) => recordOf(await request(
+      "POST",
+      route("/variables/remote/preview", "/variable/remote/preview"),
+      undefined,
+      data,
+    )),
+    refreshRemoteVariables: async (sceneId) => recordOf(await request(
+      "POST",
+      route("/variables/remote/refresh", "/variable/remote/refresh"),
+      undefined,
+      sceneId === undefined ? {} : { sceneId },
+    )),
 
     listVariableGroups: (sceneId) => getArray(
       route("/variable-groups", "/variable/group/list"),

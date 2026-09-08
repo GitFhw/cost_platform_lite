@@ -227,6 +227,21 @@ public class CostLiteProxyController {
         return post(CostLiteRouteKeys.VARIABLE_IMPORT_DATA, body, CostLiteAuth.MANAGEMENT);
     }
 
+    @PostMapping("/variables/remote/test")
+    public Object testRemoteVariable(@RequestBody(required = false) JsonNode body) {
+        return post(CostLiteRouteKeys.VARIABLE_REMOTE_TEST, body, CostLiteAuth.MANAGEMENT);
+    }
+
+    @PostMapping("/variables/remote/preview")
+    public Object previewRemoteVariable(@RequestBody(required = false) JsonNode body) {
+        return post(CostLiteRouteKeys.VARIABLE_REMOTE_PREVIEW, body, CostLiteAuth.MANAGEMENT);
+    }
+
+    @PostMapping("/variables/remote/refresh")
+    public Object refreshRemoteVariables(@RequestBody(required = false) JsonNode body) {
+        return post(CostLiteRouteKeys.VARIABLE_REMOTE_REFRESH, body, CostLiteAuth.MANAGEMENT);
+    }
+
     @DeleteMapping("/variables/{variableIds}")
     public Object deleteVariables(@PathVariable String variableIds) {
         return delete(CostLiteRouteKeys.VARIABLE_DELETE, CostLiteAuth.MANAGEMENT,

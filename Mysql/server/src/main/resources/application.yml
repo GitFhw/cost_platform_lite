@@ -53,6 +53,8 @@ cost:
     operator: ${COST_LITE_OPERATOR:lite-admin}
     max-page-size: ${COST_LITE_MAX_PAGE_SIZE:200}
     persist-billing-log: ${COST_LITE_PERSIST_BILLING_LOG:true}
+    formal-enabled: ${COST_LITE_FORMAL_ENABLED:false}
+    open-api-enabled: ${COST_LITE_OPEN_API_ENABLED:false}
     plugin-enabled: ${COST_LITE_PLUGIN_ENABLED:true}
     plugin-dir: ${COST_LITE_PLUGIN_DIR:plugins}
     dictionary:

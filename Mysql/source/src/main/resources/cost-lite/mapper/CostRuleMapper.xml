@@ -190,7 +190,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 where ver.scene_id = r.scene_id
                   and snap.snapshot_type = 'RULE'
                   and snap.object_code = r.rule_code) as publishedVersionCount,
-               (select count(1) from cost_result_trace td where td.rule_id = r.rule_id) as traceCount
+               0 as traceCount
         from cost_rule r
         left join cost_scene s on s.scene_id = r.scene_id
         left join cost_fee_item f on f.fee_id = r.fee_id

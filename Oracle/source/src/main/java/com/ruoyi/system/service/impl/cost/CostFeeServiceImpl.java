@@ -6,6 +6,7 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.lite.config.CostLiteProperties;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
@@ -37,6 +38,9 @@ public class CostFeeServiceImpl implements ICostFeeService {
 
     @Autowired
     private CostDictionaryProvider dictionaryProvider;
+
+    @Autowired
+    private CostLiteProperties liteProperties;
 
     @Autowired
     private CostGovernanceImpactSupport governanceImpactSupport;
@@ -113,7 +117,9 @@ public class CostFeeServiceImpl implements ICostFeeService {
         check.setVariableContracts(feeMapper.selectFeeVariableContracts(feeId));
         check.setRuleSummaries(feeMapper.selectFeeRuleSummaries(feeId));
         check.setPublishRefs(feeMapper.selectFeePublishRefs(feeId));
-        check.setResultRefs(feeMapper.selectFeeResultRefs(feeId));
+        check.setResultRefs(liteProperties.isFormalEnabled()
+                ? feeMapper.selectFeeResultRefs(feeId)
+                : Collections.emptyList());
         return check;
     }
 

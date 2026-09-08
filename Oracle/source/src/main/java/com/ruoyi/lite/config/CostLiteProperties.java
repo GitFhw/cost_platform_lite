@@ -32,6 +32,12 @@ public class CostLiteProperties {
     /** 是否加载外部插件。 */
     private boolean pluginEnabled = true;
 
+    /** 是否启用正式核算任务、正式结果和结果追溯能力。默认只提供工作台试算。 */
+    private boolean formalEnabled;
+
+    /** 是否启用基于 cost_open_app 的跨系统令牌开放接口。默认关闭。 */
+    private boolean openApiEnabled;
+
     /** 嵌入式运行开关；Starter 默认在宿主进程内启用，独立服务显式关闭。 */
     private Embedded embedded = new Embedded();
 
@@ -94,6 +100,22 @@ public class CostLiteProperties {
         this.pluginEnabled = pluginEnabled;
     }
 
+    public boolean isFormalEnabled() {
+        return formalEnabled;
+    }
+
+    public void setFormalEnabled(boolean formalEnabled) {
+        this.formalEnabled = formalEnabled;
+    }
+
+    public boolean isOpenApiEnabled() {
+        return openApiEnabled;
+    }
+
+    public void setOpenApiEnabled(boolean openApiEnabled) {
+        this.openApiEnabled = openApiEnabled;
+    }
+
     public Embedded getEmbedded() {
         return embedded;
     }
@@ -129,7 +151,7 @@ public class CostLiteProperties {
      * 独立运行时字典配置。
      */
     public static class Dictionary {
-        /** CONFIG 使用下方 values；SYSTEM 复用宿主系统字典；CUSTOM 由宿主提供 Bean。 */
+        /** CONFIG 使用下方 values；SYSTEM 读取当前计费库字典；CUSTOM 由宿主提供 Bean。 */
         private String provider = "SYSTEM";
 
         /** 是否校验已配置字典类型的取值。 */
@@ -141,10 +163,10 @@ public class CostLiteProperties {
         /** 计费统一字典类型与允许值。 */
         private Map<String, List<String>> values = defaultValues();
 
-        /** 计费统一字典类型到宿主字典类型的映射，仅在名称不一致时配置。 */
+        /** 计费统一字典类型到当前字典存储类型的映射，仅在名称不一致时配置。 */
         private Map<String, String> typeMappings = new LinkedHashMap<>();
 
-        /** 计费统一字典值到宿主字典值的映射，第一层键始终使用计费统一字典类型。 */
+        /** 计费统一字典值到当前字典存储值的映射，第一层键始终使用计费统一字典类型。 */
         private Map<String, Map<String, String>> valueMappings = new LinkedHashMap<>();
 
         public String getProvider() {
@@ -207,7 +229,7 @@ public class CostLiteProperties {
          * 把计费统一字典类型解析为当前宿主使用的类型编码。
          *
          * @param dictType 计费统一字典类型
-         * @return 宿主字典类型；未配置映射时原样返回
+         * @return 当前字典存储类型；未配置映射时原样返回
          */
         public String resolveType(String dictType) {
             String mapped = typeMappings.get(dictType);
@@ -219,7 +241,7 @@ public class CostLiteProperties {
          *
          * @param dictType  计费统一字典类型
          * @param dictValue 计费统一字典值
-         * @return 宿主字典值；未配置映射时原样返回
+         * @return 当前字典存储值；未配置映射时原样返回
          */
         public String resolveValue(String dictType, String dictValue) {
             Map<String, String> mappings = valueMappings.get(dictType);

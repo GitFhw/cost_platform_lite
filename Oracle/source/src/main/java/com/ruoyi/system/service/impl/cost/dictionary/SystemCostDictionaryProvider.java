@@ -8,7 +8,7 @@ import com.ruoyi.system.service.cost.dictionary.CostDictionaryProvider;
 import java.util.List;
 
 /**
- * 母体系统字典适配器。
+ * 标准系统字典表适配器。
  */
 public class SystemCostDictionaryProvider implements CostDictionaryProvider {
     private final SysDictDataMapper dictDataMapper;

@@ -3,8 +3,6 @@ package com.ruoyi.lite.config;
 import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.system.domain.SysConfig;
 import com.ruoyi.system.service.ISysConfigService;
-import org.springframework.context.annotation.Primary;
-import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -18,8 +16,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>计费核心只需要读取告警 Webhook 等少量参数，不应因为没有完整若依系统参数模块而无法启动。
  * 参数仍可通过环境变量和本地内存覆盖；接入完整若依母体时，可移除此实现并使用母体服务。</p>
  */
-@Service
-@Primary
 public class LiteSysConfigService implements ISysConfigService {
     private final Map<String, SysConfig> configs = new ConcurrentHashMap<>();
 

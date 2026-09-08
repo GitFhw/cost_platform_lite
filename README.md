@@ -2,7 +2,7 @@
 
 本仓库保存轻量计费的可维护核心源码、第三方系统接入入口、配置、SQL、前端工作台和已发布运行制品；不保存母体平台的完整工程、无关模块或任何客户业务源码。
 
-当前 `cost/embedded-core-library` 分支提供推荐的同进程嵌入模式：Java 8 + Spring Boot 2.7 的 Servlet 业务项目只引入对应数据库的 Starter，Starter 会通过 Maven 传递依赖带入匹配的 `cost-lite-core-*`，自动注册计费 Controller、Service、Mapper 和独立数据库连接，不再启动单独的 Lite 进程。MySQL 说明见 [Mysql/EMBEDDED.md](Mysql/EMBEDDED.md)，Oracle 说明见 [Oracle/EMBEDDED.md](Oracle/EMBEDDED.md)。
+当前 `cost/embedded-core-library` 分支提供推荐的同进程嵌入模式：Java 8 + Spring Boot 2.x Servlet 业务项目只引入对应数据库的 Starter，当前以 Spring Boot 2.7.18 作为验证基线。Starter 会通过 Maven 传递依赖带入匹配的 `cost-lite-core-*`，自动注册计费 Controller、Service、Mapper 和命名计费数据源，不再启动单独的 Lite 进程。入口不依赖若依包名。MySQL 说明见 [Mysql/EMBEDDED.md](Mysql/EMBEDDED.md)，Oracle 说明见 [Oracle/EMBEDDED.md](Oracle/EMBEDDED.md)。
 
 ## 当前交付状态
 
@@ -16,10 +16,10 @@
 
 MySQL 当前同时保留两种部署形态：
 
-1. 嵌入模式：对应数据库的 `cost-lite-starter-*` + `cost-lite-core-*` 在业务应用同一个 JVM 内运行，Starter 自动注册母体兼容 `/cost/**` 入口，使用 `cost.lite.datasource.*` 连接独立计费库。
-2. 独立服务/代理模式：`cost-lite-server-*` 单独运行，旧版 `backend-integration` Starter 通过 HTTP 转发；适用于不能引入同进程 Starter 的 Java 8、Spring Boot 2、SSM 项目。
+1. 嵌入模式：对应数据库的 `cost-lite-starter-*` + `cost-lite-core-*` 在业务应用同一个 JVM 内运行，Starter 自动注册母体兼容 `/cost/**` 入口；配置了 `cost.lite.datasource.url` 时使用专用计费库，省略时复用宿主 `DataSource`。
+2. 独立服务/代理模式：`cost-lite-server-*` 单独运行；Spring Boot 2.x 宿主可使用 `backend-integration` HTTP Starter 转发，非 Boot/传统 SSM 宿主直接使用同目录的无 Spring `cost-lite-client` 调用。两者都适用于不能引入同进程 Starter 的 Java 8 项目。
 
-Oracle 和 MySQL 共用 `Front/` 工作台和统一的 `CostLiteApi` 协议。MySQL 的嵌入 Starter 不连接宿主默认数据源，也不接管宿主登录安全链；旧版 HTTP Starter 仍只负责代理、鉴权边界、超时和路由归一。
+Oracle 和 MySQL 共用 `Front/` 工作台和统一的 `CostLiteApi` 协议。嵌入 Starter 默认可复用宿主数据源，也可创建命名的专用计费数据源，不接管宿主登录安全链；旧版 HTTP Starter 仍只负责代理、鉴权边界、超时和路由归一。
 
 `Mysql/runtime/cost-lite-server-1.0.0.jar` 和 `Oracle/runtime/cost-lite-server-1.0.0.jar` 仍是独立运行制品，仅用于兼容部署，不是嵌入模式的必需品。
 
@@ -27,14 +27,16 @@ Oracle 和 MySQL 共用 `Front/` 工作台和统一的 `CostLiteApi` 协议。My
 
 ## 源码与数据库落位
 
-`Mysql/starter/` 提供 MySQL 嵌入式 `cost-lite-starter-mysql`；`Oracle/starter/` 提供 Oracle 嵌入式 `cost-lite-starter-oracle`。两者使用同一套 Starter 代码契约，只因数据库驱动和核心制品不同而分别构建。`Mysql/source/`、`Oracle/source/` 分别构建不带主类的 `cost-lite-core-mysql`、`cost-lite-core-oracle` 普通 Jar；`backend-integration/` 继续提供 Java 8 兼容的 HTTP `Client/Starter`，供不能使用同进程 Starter 的旧 SSM 或 Spring Boot 2 项目使用。
+`Mysql/starter/` 提供 MySQL 嵌入式 `cost-lite-starter-mysql`；`Oracle/starter/` 提供 Oracle 嵌入式 `cost-lite-starter-oracle`。两者使用同一套 Starter 代码契约，只因数据库驱动和核心制品不同而分别构建。`Mysql/source/`、`Oracle/source/` 分别构建不带主类的 `cost-lite-core-mysql`、`cost-lite-core-oracle` 普通 Jar；`backend-integration/` 继续提供 Java 8 兼容的无 Spring `Client` 和可选 HTTP `Starter`。非 Boot/旧 SSM 使用 `Client`，Spring Boot 2.x 使用 HTTP `Starter`，两者都不要求宿主引入若依。
 
 `Mysql/source/` 和 `Oracle/source/` 分别保存 MySQL、Oracle 计费核心源码及独立 Maven 构建入口，后续核心开发和 Jar 打包都在本仓库完成。它们只包含轻量计费必要的计费代码和兼容层，不包含母体后台等无关模块。计费核心运行时仍以对应数据库版本的 Jar 交付：MySQL 使用 `Mysql/runtime/cost-lite-server-1.0.0.jar`，Oracle 使用 `Oracle/runtime/cost-lite-server-1.0.0.jar`。Jar 的数据库账号、密码和 JDBC 地址由部署环境提供，不能写死进 Jar。
 
 数据库有两种落位方式，二选一即可：
 
-1. 独立计费库：创建专用数据库或 Schema，执行对应 `cost-lite-schema.sql`，Jar 连接这个库。
-2. 业务库同库：在客户业务数据库中执行同一份 SQL，Jar 的 JDBC 配置指向该业务库；业务项目原有数据源和业务表无需迁移，Starter 仍只配置 Jar 地址。
+1. 独立计费库：创建专用数据库或 Schema，执行对应 `cost-lite-schema.sql`，Starter/Jar 连接这个库。默认脚本只初始化轻量工作台和试算所需表。
+2. 业务库同库：在客户业务数据库中执行同一份 SQL；嵌入 Starter 省略专用 URL 并复用宿主数据源，独立服务 Jar 则把 JDBC 配置指向该业务库。业务项目原有数据和业务表无需迁移。
+
+默认轻量库只保留配置、发布、试算日志/结果和页面字典。需要业务后端正式任务、正式结果追溯、重算/告警或 OpenApp 时，才在同一目标库继续执行对应数据库的 `cost-lite-formal-schema.sql`，并打开相应能力开关；工作台本身不要求这些可选表。
 
 两种方式使用相同的 `cost_*` 表、字段和编码。SQL 不会自动创建或切换客户数据库，必须由实施人员连接目标库后手动执行；已有同名表和字典表时先比对结构，脚本只补充缺失的轻量计费字典数据。
 
@@ -102,7 +104,7 @@ cost_platform_lite/
 ## 冻结原则
 
 1. 计费表名、字段名和业务编码与母体保持一致，不新建 `lite_*` 或 `billing_*` 平行实体。
-2. 嵌入模式的宿主只引入数据库匹配的 `cost-lite-starter-mysql` 或 `cost-lite-starter-oracle` 并配置独立数据库；旧版项目才使用 HTTP Starter + 独立服务，不复制母体 Controller、Service、Mapper 或实体。
+2. 嵌入模式的宿主只引入数据库匹配的 `cost-lite-starter-mysql` 或 `cost-lite-starter-oracle`；专用库配置或宿主数据源复用二选一。旧版项目才使用 HTTP Starter + 独立服务，不复制母体 Controller、Service、Mapper 或实体。
 3. 前端适配器同时支持 `runtime` 和 `proxy` 两种部署入口：嵌入 Starter/独立 Jar 使用母体兼容 `runtime` 路由，旧版 HTTP Starter 使用 `proxy` 路由；如宿主已有路径冲突，只需调整前端 `basePath`。
 4. 数据库只初始化轻量运行所需的 `cost_*` 表和母体字典对应的 `sys_dict_type`、`sys_dict_data`，不迁移其他 RuoYi `sys_*` 表或无关业务表；前端下拉直接读取轻量库字典，数据库始终保存母体统一编码。
 5. 公式后端接口保留。当前精简工作台已在同一页面提供公式资产维护、试算、版本和回退；直接“公式费目无规则”暂不启用，规则仍负责条件命中，公式负责金额表达式。

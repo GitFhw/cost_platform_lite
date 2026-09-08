@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,6 +39,7 @@ import java.util.Map;
  * <p>开放接口只暴露已授权场景和正式运行能力，配置维护仍走管理接口。</p>
  */
 @RestController
+@ConditionalOnProperty(prefix = "cost.lite", name = "open-api-enabled", havingValue = "true")
 @RequestMapping("/cost/open")
 public class CostLiteOpenController {
     private static final String TOKEN_HEADER = "X-Cost-Open-Token";

@@ -62,18 +62,25 @@ public class CostLiteOperationsController extends CostLiteControllerSupport {
     @GetMapping("/bootstrap")
     public AjaxResult bootstrap() {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
-        result.put("serviceName", "cost-lite-server");
+        result.put("serviceName", "cost-lite-core");
         result.put("apiVersion", "v1");
         result.put("operator", properties.getOperator());
         result.put("authEnabled", properties.isAuthEnabled());
         result.put("persistBillingLog", properties.isPersistBillingLog());
         result.put("pluginEnabled", properties.isPluginEnabled());
+        result.put("formalEnabled", properties.isFormalEnabled());
+        result.put("openApiEnabled", properties.isOpenApiEnabled());
         result.put("plugins", pluginRegistry.getPlugins().stream().map(item -> item.getCode()).sorted().collect(java.util.stream.Collectors.toList()));
         result.put("managementEndpoints", java.util.Arrays.asList(
                 "/cost/scene", "/cost/fee", "/cost/variable", "/cost/rule", "/cost/formula", "/cost/publish"));
-        result.put("openEndpoints", java.util.Arrays.asList(
-                "/cost/open/auth/token", "/cost/open/scenes", "/cost/open/fee-template", "/cost/open/fee/calculate"));
-        result.put("deploymentModes", Arrays.asList("JAR独立库", "JAR初始化到业务库"));
+        result.put("openEndpoints", properties.isOpenApiEnabled()
+                ? java.util.Arrays.asList("/cost/open/auth/token", "/cost/open/scenes", "/cost/open/fee-template", "/cost/open/fee/calculate")
+                : java.util.Collections.emptyList());
+        result.put("formalEndpoints", properties.isFormalEnabled()
+                ? java.util.Arrays.asList("/cost/run/task/**", "/cost/run/result/**", "/cost/run/trace/**")
+                : java.util.Collections.emptyList());
+        result.put("deploymentModes", Arrays.asList("同进程 Starter 复用宿主数据源",
+                "同进程 Starter 使用专用计费库", "独立服务兼容模式"));
         return AjaxResult.success(result);
     }
 

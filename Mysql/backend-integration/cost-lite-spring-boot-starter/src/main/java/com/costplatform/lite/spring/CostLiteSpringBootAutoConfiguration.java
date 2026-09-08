@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Spring Boot 2/3 均可加载的自动配置。核心客户端本身不依赖 Spring。
+ * Spring Boot 2.7 的代理自动配置。核心客户端本身不依赖 Spring；非 Boot 宿主可直接使用 Client。
  */
 @Configuration
 @ConditionalOnClass({RestController.class, ObjectMapper.class})

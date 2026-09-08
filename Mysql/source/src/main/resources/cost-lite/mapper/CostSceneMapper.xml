@@ -106,19 +106,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                (select count(1) from cost_variable v where v.scene_id = s.scene_id) as variableCount,
                (select count(1) from cost_rule r where r.scene_id = s.scene_id) as ruleCount,
                (select count(1) from cost_publish_version p where p.scene_id = s.scene_id) as publishedVersionCount,
-               (select count(1) from cost_calc_task t where t.scene_id = s.scene_id) as taskCount,
-               (select count(1)
-                from cost_calc_task t
-                where t.scene_id = s.scene_id
-                  and t.task_status in ('INIT', 'RUNNING')) as runningTaskCount,
-               (select count(1)
-                from cost_calc_task t
-                where t.scene_id = s.scene_id
-                  and (t.task_status = 'FAILED' or coalesce(t.fail_count, 0) > 0)) as failedTaskCount,
-               (select count(1) from cost_result_ledger l where l.scene_id = s.scene_id) as resultLedgerCount,
+               0 as taskCount,
+               0 as runningTaskCount,
+               0 as failedTaskCount,
+               0 as resultLedgerCount,
                (select count(1) from cost_simulation_record sr where sr.scene_id = s.scene_id) as simulationRecordCount,
-               (select count(1) from cost_calc_input_batch ib where ib.scene_id = s.scene_id) as inputBatchCount,
-               (select count(1) from cost_result_trace rt where rt.scene_id = s.scene_id) as traceCount
+               0 as inputBatchCount,
+               0 as traceCount
         from cost_scene s
         left join cost_publish_version active_ver on active_ver.version_id = s.active_version_id
         where s.scene_id = #{sceneId}

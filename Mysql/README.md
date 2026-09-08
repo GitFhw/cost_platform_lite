@@ -14,31 +14,32 @@
 运行方式按宿主兼容性选择：
 
 1. 嵌入模式：`cost-lite-starter-mysql` 自动带入 `cost-lite-core-mysql`，在业务 JVM 内注册母体兼容 `/cost/**`。
-2. 独立服务模式：`cost-lite-server` 单独运行，旧版 HTTP Starter 负责代理，适用于 Java 8、Spring Boot 2、SSM 等项目。
+2. 独立服务模式：`cost-lite-server` 单独运行；Spring Boot 2.x 宿主可用 HTTP Starter 代理，非 Boot/传统 SSM 宿主直接用无 Spring `cost-lite-client` 调用，均适用于 Java 8 项目。
 
 两种方式使用同一套表名和字段。区别只有 JDBC 地址，不需要修改计费实体或 Starter。
 
 ### 1.1 配置归属和组件职责
 
-数据库账号密码不打进 Jar，也不写入 Git。嵌入模式由业务应用读取 `cost.lite.datasource.*` 并建立 Lite 独立连接池；独立服务模式则由 `cost-lite-server` 读取 `spring.datasource`。旧版 HTTP Starter 不读取数据库配置，只负责把请求转给独立 MySQL 服务。
+数据库账号密码不打进 Jar，也不写入 Git。嵌入模式由业务应用读取 `cost.lite.datasource.*`：配置专用 JDBC URL 时建立 Lite 独立连接池，省略 URL 时复用宿主 `DataSource`；独立服务模式则由 `cost-lite-server` 读取 `spring.datasource`。旧版 HTTP Starter 不读取数据库配置，只负责把请求转给独立 MySQL 服务。
 
 因此两种部署的配置边界如下：
 
 | 组件 | 配置内容 | 是否连接数据库 |
 | --- | --- | --- |
-| `cost-lite-starter-mysql` 嵌入入口 | `cost.lite.datasource.*`、宿主路径和权限配置 | 是，使用独立计费连接池 |
+| `cost-lite-starter-mysql` 嵌入入口 | `cost.lite.datasource.*`、宿主路径和权限配置 | 是，专用库或复用宿主数据源 |
 | MySQL 独立服务 Jar | JDBC URL、数据库账号密码、运行端口、管理 Token | 是，连接专用库或业务库 |
 | 旧版 HTTP Starter | MySQL Jar 地址、代理路径、超时、令牌 | 否 |
 | `Front/` 工作台 | `/cost` 或 `/cost` 路由模式 | 否 |
 
-当前推荐的正式接入形态是“业务项目 + `cost-lite-starter-mysql` + 独立计费库”。`cost-lite-starter-mysql` 是入口，`cost-lite-core-mysql` 是随 Maven 传递引入的核心；两者均不需要单独启动。仓库内的 `source/` 仅供我们维护核心，客户迁移不需要复制。旧项目仍可使用“HTTP Starter + `cost-lite-server`”兼容方案。
+当前推荐的正式接入形态是“业务项目 + `cost-lite-starter-mysql` + 选定的数据源落位”。`cost-lite-starter-mysql` 是入口，`cost-lite-core-mysql` 是随 Maven 传递引入的核心；两者均不需要单独启动。仓库内的 `source/` 仅供我们维护核心，客户迁移不需要复制。旧项目仍可使用“HTTP Starter + `cost-lite-server`”兼容方案。
 
 ## 2. 环境要求
 
 - 嵌入式 `cost-lite-starter-mysql`：Java 8、Spring Boot 2.7 Servlet 应用。
 - 独立 `cost-lite-server-mysql`：Java 8 运行环境即可。
 - 数据库：MySQL 8.0+，字符集 `utf8mb4`。
-- 旧版 HTTP Starter 宿主：Java 8+；Spring Boot 2.7 或传统 SSM。
+- 无 Spring `cost-lite-client`：Java 8+，适用于传统 SSM、非 Spring Boot 或其他 Java 服务。
+- 旧版 HTTP Starter 宿主：Java 8+、Spring Boot 2.7 Servlet 应用。
 - 宿主前端：Vue 3、Element Plus。前端接入见 `../Front/README.md`。
 
 ## 3. 初始化数据库
@@ -65,7 +66,9 @@ mysql -h 127.0.0.1 -P 3306 -u app_user -p business_db < Mysql/sql/cost-lite-sche
 
 脚本使用母体平台表名，不创建轻量版平行实体。已有同名表时应先比对字段，不要直接覆盖。
 
-脚本只包含当前轻量 Jar 和工作台所需的 26 张 `cost_*` 表：场景、费目、要素、规则、发布、试算、正式任务、结果追溯，以及运行所需的账期控制、审计和异常治理表；另包含母体字典实体对应的 `sys_dict_type`、`sys_dict_data` 两张字典表。`cost_bill_period` 是正式任务的账期运行控制表，不是账单明细表；脚本不包含 RuoYi 的其他 `sys_*` 表、宿主基础设施表、客户业务表或无关账单表，也不依赖宿主字典接口。前端下拉直接读取当前轻量库字典，修改字典表后刷新页面即可。
+默认脚本只包含当前工作台和试算链路需要的 14 张 `cost_*` 表：场景、费目、要素、条件、规则、公式、发布、试算记录和审计；另包含页面实际需要的 `sys_dict_type`、`sys_dict_data` 两张字典表。它不包含正式任务、正式结果、账期控制、开放应用等可选能力表，也不包含 RuoYi 的其他 `sys_*` 表、宿主基础设施表、客户业务表或无关账单表。前端下拉直接读取当前轻量库字典，修改字典表后刷新页面即可。
+
+如果确实要启用业务后端正式核算、正式结果追溯、重算/告警或 OpenApp 跨系统令牌，再额外执行 [cost-lite-formal-schema.sql](sql/cost-lite-formal-schema.sql)，并按需设置 `cost.lite.formal-enabled=true` 或 `cost.lite.open-api-enabled=true`。当前工作台试算不需要这份可选脚本。
 
 ### 3.3 初始化检查
 
@@ -76,7 +79,7 @@ where table_schema = database()
   and table_name like 'cost\_%';
 ```
 
-至少应包含场景、费目、要素、规则、发布、试算、任务、结果和追溯相关表。
+默认应包含场景、费目、要素、条件组、规则、公式、发布、试算记录和审计相关表；不应因为默认脚本而出现 `cost_calc_task`、`cost_result_ledger`、`cost_result_trace`、`cost_open_app` 等可选表。启用正式能力后，再检查可选脚本中的对应表。
 
 ## 4. 兼容模式：启动独立计费服务 Jar
 
@@ -189,7 +192,41 @@ curl http://127.0.0.1:18080/cost/lite/health
 
 然后配置 `cost.lite.datasource.url`、`username` 和 `password`。Starter 会自动注册计费 Controller、Service、Mapper 和事务，业务项目自身的 `spring.datasource` 保持不变。完整配置、验证命令和兼容边界见 [EMBEDDED.md](EMBEDDED.md)。
 
-## 7. 兼容模式：安装 HTTP 宿主 Starter
+## 7. 兼容模式：非 Boot Client 和 HTTP 宿主 Starter
+
+传统 SSM、非 Spring Boot 或其他 Java 8 服务只需要引用无 Spring 的 Client：
+
+```xml
+<dependency>
+    <groupId>com.costplatform</groupId>
+    <artifactId>cost-lite-client</artifactId>
+    <version>${cost-lite.version}</version>
+</dependency>
+```
+
+Client 只使用 JDK `HttpURLConnection` 和 Jackson，不要求宿主使用 Spring 或若依。直连独立 Jar 时，业务服务可以这样调用场景级同步计费：
+
+```java
+CostLiteClientProperties properties = new CostLiteClientProperties();
+properties.setBaseUrl(System.getenv("COST_LITE_BASE_URL"));
+properties.setAdminToken(System.getenv("COST_LITE_ADMIN_TOKEN"));
+CostLiteClient client = new DefaultCostLiteClient(properties);
+
+Map<String, Object> body = new LinkedHashMap<>();
+body.put("sceneId", 4L);
+body.put("versionId", 1L);
+body.put("billMonth", "2026-09");
+body.put("inputJson", objectMapper.writeValueAsString(orderInput));
+body.put("includeExplain", false);
+
+CostLiteResponse response = client.post(
+    "/cost/run/fee/calculate", body, CostLiteAuth.MANAGEMENT);
+JsonNode result = response.getDataNode();
+```
+
+如果请求经过宿主 HTTP 代理，把路径改为 `/cost/calculate`，认证范围使用 `CostLiteAuth.NONE`；代理服务端会从自己的外部配置注入上游管理令牌。请求体、场景级/指定费目路径和批量试算完整说明见 [API.md](API.md)。
+
+Spring Boot 2.7 宿主如果需要自动注册稳定的 `/cost/**` 代理入口，再安装下面的 HTTP 宿主 Starter：
 
 在仓库根目录执行：
 
@@ -197,7 +234,7 @@ curl http://127.0.0.1:18080/cost/lite/health
 mvn -f Mysql/backend-integration/pom.xml clean install
 ```
 
-Starter 和 Client 均以 Java 8 编译。Client 不依赖 Spring；HTTP Starter 适用于 Spring Boot 2.7 或传统 SSM。当前同进程 Starter 使用 Boot 2.7 的 `javax.*` 兼容线，不与 Boot 3 的 `jakarta.*` 依赖混用。
+Starter 和 Client 均以 Java 8 编译。Client 不依赖 Spring；HTTP Starter 只适用于 Spring Boot 2.7 Servlet 宿主。当前同进程 Starter 使用 Boot 2.7 的 `javax.*` 兼容线，不与 Boot 3 的 `jakarta.*` 依赖混用。
 
 ## 8. 修改宿主 POM
 

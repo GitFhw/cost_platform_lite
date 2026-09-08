@@ -1,11 +1,11 @@
 package com.costplatform.lite.starter;
 
 import com.ruoyi.lite.config.CostLiteHttpConfig;
-import com.ruoyi.lite.config.CostLiteJacksonConfig;
 import com.ruoyi.lite.config.CostLiteProperties;
 import com.ruoyi.lite.config.CostLiteThreadPoolConfig;
-import com.ruoyi.lite.config.LiteSysConfigService;
+import com.ruoyi.lite.config.CostLiteHostCompatibilityConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -20,6 +20,10 @@ import org.springframework.context.annotation.Import;
  * 就会注册到客户应用自己的 Spring 容器中，不会启动第二个进程。</p>
  */
 @AutoConfiguration
+@AutoConfigureAfter({
+        CostLiteDedicatedDataSourceConfiguration.class,
+        CostLiteHostDataSourceConfiguration.class
+})
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(CostLiteProperties.class)
 @ConditionalOnProperty(prefix = "cost.lite.embedded", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -28,9 +32,8 @@ import org.springframework.context.annotation.Import;
         CostLiteEmbeddedPersistenceConfiguration.class,
         CostLiteEmbeddedWebConfiguration.class,
         CostLiteHttpConfig.class,
-        CostLiteJacksonConfig.class,
         CostLiteThreadPoolConfig.class,
-        LiteSysConfigService.class
+        CostLiteHostCompatibilityConfiguration.class
 })
 @ComponentScan(basePackages = {
         "com.ruoyi.common.config",

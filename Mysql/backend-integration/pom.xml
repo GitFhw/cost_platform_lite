@@ -9,7 +9,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>cost-lite-integration</name>
-    <description>Framework-neutral integration artifacts for the lightweight billing platform</description>
+    <description>轻量计费平台的通用集成制品</description>
 
     <properties>
         <java.version>1.8</java.version>

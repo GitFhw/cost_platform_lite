@@ -2,9 +2,9 @@
 
 ## 1. 组件定位
 
-`Front/src` 是 Oracle 和 MySQL 共用的一套 Vue 3 工作台，只负责计费维护和联调界面，不依赖母体路由、菜单、权限模型、业务实体、宿主字典接口或请求封装。工作台启动时通过运行 Jar 的 `/dictionary/options` 读取目标轻量库中的计费字典，因此宿主项目不需要复制字典 JS。
+`Front/src` 是 Oracle 和 MySQL 共用的一套 Vue 3 工作台，只负责计费维护和联调界面，不依赖母体路由、菜单、权限模型、业务实体、宿主字典接口或请求封装。工作台启动时通过宿主暴露的 `/cost/dictionary/options` 读取当前计费数据源中的计费字典，因此宿主项目不需要复制字典 JS。
 
-Jar 连接目标库中按 `Mysql/sql/cost-lite-schema.sql` 或 `Oracle/sql/cost-lite-schema.sql` 初始化的同名 `cost_*` 表，字段与母体实体保持一致，并只读取轻量 SQL 同步初始化的 `sys_dict_type`、`sys_dict_data` 两张字典表；不要求目标系统迁移母体源码、其他 `sys_*` 表或无关业务表。前端字典和数据库连接彼此独立。
+Jar 连接目标库中按 `Mysql/sql/cost-lite-schema.sql` 或 `Oracle/sql/cost-lite-schema.sql` 初始化的同名 `cost_*` 表，字段与母体实体保持一致，并只读取轻量 SQL 同步初始化的 `sys_dict_type`、`sys_dict_data` 两张字典表；不要求目标系统迁移母体源码、其他 `sys_*` 表或无关业务表。前端只通过宿主接口读取字典，不直接连接数据库。
 
 工作台采用单一简化模式，包含：
 

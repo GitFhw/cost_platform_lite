@@ -133,29 +133,62 @@ public class CostDistributedLockSupport {
     private <T> T executeWithOptionalLock(String lockKey, long leaseSeconds, Supplier<T> supplier) {
         String token = UUID.randomUUID().toString();
         if (redisTemplate != null) {
+            Boolean locked;
             try {
-                Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, token, leaseSeconds, TimeUnit.SECONDS);
-                if (!Boolean.TRUE.equals(locked)) {
-                    return null;
-                }
-                return executeWithRedisLock(lockKey, token, supplier);
-            } catch (RuntimeException ignored) {
-                // 轻量版没有可用 Redis 时使用进程内锁，保证单实例可直接运行。
+                locked = redisTemplate.opsForValue().setIfAbsent(lockKey, token, leaseSeconds, TimeUnit.SECONDS);
+            } catch (RuntimeException ex) {
+                // Redis 已配置但不可用时不能降级到本地锁，否则集群中的其他实例可能同时执行。
+                throw new ServiceException("计费分布式锁不可用，请检查 Redis 连接配置");
             }
+            if (!Boolean.TRUE.equals(locked)) {
+                return null;
+            }
+            // supplier 的业务异常必须原样向上抛出，不能被锁连接异常分支再次执行。
+            return executeWithRedisLock(lockKey, token, supplier);
         }
 
+        return executeWithLocalLock(lockKey, leaseSeconds, supplier);
+    }
+
+    private <T> T executeWithLocalLock(String lockKey, long leaseSeconds, Supplier<T> supplier) {
+        long now = System.currentTimeMillis();
         long expireAt = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(leaseSeconds);
-        LocalLock previous = localLocks.putIfAbsent(lockKey, new LocalLock(token, expireAt));
-        if (previous != null && previous.expireAt > System.currentTimeMillis()) {
-            return null;
+        LocalLock current = new LocalLock(expireAt);
+        while (true) {
+            LocalLock previous = localLocks.putIfAbsent(lockKey, current);
+            if (previous == null) {
+                break;
+            }
+            if (previous.expireAt > now) {
+                return null;
+            }
+            if (localLocks.replace(lockKey, previous, current)) {
+                break;
+            }
+            now = System.currentTimeMillis();
         }
-        if (previous != null) {
-            localLocks.replace(lockKey, previous, new LocalLock(token, expireAt));
+
+        boolean releaseAfterTransaction = false;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            try {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        localLocks.remove(lockKey, current);
+                    }
+                });
+                releaseAfterTransaction = true;
+            } catch (RuntimeException ex) {
+                localLocks.remove(lockKey, current);
+                throw ex;
+            }
         }
         try {
             return supplier.get();
         } finally {
-            localLocks.remove(lockKey, localLocks.get(lockKey));
+            if (!releaseAfterTransaction) {
+                localLocks.remove(lockKey, current);
+            }
         }
     }
 
@@ -196,11 +229,9 @@ public class CostDistributedLockSupport {
     }
 
     private static final class LocalLock {
-        private final String token;
         private final long expireAt;
 
-        private LocalLock(String token, long expireAt) {
-            this.token = token;
+        private LocalLock(long expireAt) {
             this.expireAt = expireAt;
         }
     }

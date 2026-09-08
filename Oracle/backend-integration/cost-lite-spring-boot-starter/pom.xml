@@ -12,7 +12,7 @@
 
     <artifactId>cost-lite-spring-boot-starter</artifactId>
     <name>cost-lite-spring-boot-starter</name>
-    <description>Optional Spring Boot proxy starter for the lightweight billing platform</description>
+    <description>轻量计费平台的可选 Spring Boot HTTP 代理入口</description>
 
     <dependencies>
         <dependency>

@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 /**
  * 轻量要素维护接口。页面称“要素”，数据仍复用母体变量实体。
  */
@@ -79,6 +81,38 @@ public class CostLiteVariableController extends CostLiteControllerSupport {
     @PostMapping("/copy")
     public AjaxResult copy(@RequestBody CostVariableCopyRequest request) {
         return success(variableService.copyVariable(request));
+    }
+
+    /**
+     * 测试当前远程要素配置对应的第三方接口。
+     */
+    @PostMapping("/remote/test")
+    public AjaxResult testRemote(@RequestBody Map<String, Object> request) {
+        return success(variableService.testRemoteConnection(request));
+    }
+
+    /**
+     * 预览当前远程要素的原始数据和映射结果。
+     */
+    @PostMapping("/remote/preview")
+    public AjaxResult previewRemote(@RequestBody Map<String, Object> request) {
+        return success(variableService.previewRemoteData(request));
+    }
+
+    /**
+     * 复用母体的远程要素缓存刷新检查入口。
+     */
+    @PostMapping("/remote/refresh")
+    public AjaxResult refreshRemote(@RequestBody(required = false) Map<String, Object> request) {
+        Long sceneId = null;
+        if (request != null && request.get("sceneId") != null) {
+            try {
+                sceneId = Long.valueOf(String.valueOf(request.get("sceneId")));
+            } catch (NumberFormatException exception) {
+                return error("场景编号必须是数字");
+            }
+        }
+        return success(variableService.refreshRemoteCache(sceneId));
     }
 
     @DeleteMapping("/{variableIds}")

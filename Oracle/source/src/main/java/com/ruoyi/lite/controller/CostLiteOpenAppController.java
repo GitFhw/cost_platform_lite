@@ -19,11 +19,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /**
  * 开放应用管理接口。
  */
 @RestController
+@ConditionalOnProperty(prefix = "cost.lite", name = "open-api-enabled", havingValue = "true")
 @RequestMapping("/cost/openApp")
 public class CostLiteOpenAppController extends CostLiteControllerSupport {
     private final ICostOpenAppService openAppService;
