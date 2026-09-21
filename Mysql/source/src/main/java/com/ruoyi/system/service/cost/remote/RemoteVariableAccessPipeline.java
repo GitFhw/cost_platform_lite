@@ -61,7 +61,8 @@ public class RemoteVariableAccessPipeline {
         endpointGuard.validate(uri);
         HttpHeaders headers = requestBuilder.buildHeaders(config);
         String authHeaderName = authHandler.resolveAuthHeaderName(config);
-        boolean authHeaderApplied = StringUtils.isNotEmpty(authHeaderName) && headers.containsKey(authHeaderName);
+        boolean authHeaderApplied = StringUtils.isNotEmpty(authHeaderName)
+                && headers.toSingleValueMap().containsKey(authHeaderName);
         boolean authTokenPresent = authHandler.hasConfiguredAuthToken(config);
         log.info("第三方变量开始调用: variableCode={}, method={}, uri={}, authType={}, authHeaderApplied={}, authTokenPresent={}",
                 config.variableCode, config.requestMethod, uri, config.authType, authHeaderApplied, authTokenPresent);
@@ -80,10 +81,10 @@ public class RemoteVariableAccessPipeline {
                     extractFirstText(bodyNode, textValue(responseConfig, "messagePath"), DEFAULT_MESSAGE_PATHS),
                     response.getStatusCode().is2xxSuccessful() ? "接口调用成功" : "接口调用失败");
             log.info("第三方变量调用完成: variableCode={}, statusCode={}, elapsedMs={}, rowCount={}, success={}",
-                    config.variableCode, response.getStatusCodeValue(), elapsedMs, items == null ? 0 : items.size(), success);
-            return new RemoteInvokeResult(success, message, response.getStatusCodeValue(), elapsedMs, contentType,
+                    config.variableCode, response.getStatusCode().value(), elapsedMs, items == null ? 0 : items.size(), success);
+            return new RemoteInvokeResult(success, message, response.getStatusCode().value(), elapsedMs, contentType,
                     responseBody.length(), bodyNode, items,
-                    uri.toString(), new ArrayList<>(headers.keySet()), authHeaderApplied, authHeaderName, authTokenPresent,
+                    uri.toString(), new ArrayList<>(headers.toSingleValueMap().keySet()), authHeaderApplied, authHeaderName, authTokenPresent,
                     "", "", "");
         } catch (RestClientResponseException ex) {
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
@@ -97,10 +98,10 @@ public class RemoteVariableAccessPipeline {
                     ex.getStatusText(),
                     "第三方接口返回异常");
             log.warn("第三方变量调用返回异常响应: variableCode={}, statusCode={}, elapsedMs={}, uri={}, message={}",
-                    config.variableCode, ex.getRawStatusCode(), elapsedMs, uri, message);
-            return new RemoteInvokeResult(false, message, ex.getRawStatusCode(), elapsedMs, contentType,
+                    config.variableCode, ex.getStatusCode().value(), elapsedMs, uri, message);
+            return new RemoteInvokeResult(false, message, ex.getStatusCode().value(), elapsedMs, contentType,
                     responseBody.length(), bodyNode, Collections.emptyList(),
-                    uri.toString(), new ArrayList<>(headers.keySet()), authHeaderApplied, authHeaderName, authTokenPresent,
+                    uri.toString(), new ArrayList<>(headers.toSingleValueMap().keySet()), authHeaderApplied, authHeaderName, authTokenPresent,
                     "REMOTE_RESPONSE", ex.getClass().getSimpleName(), firstNonBlank(responseBody, ex.getMessage()));
         } catch (RestClientException ex) {
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
@@ -110,7 +111,7 @@ public class RemoteVariableAccessPipeline {
             log.warn("第三方变量调用网络异常: variableCode={}, elapsedMs={}, uri={}, failureStage={}, errorType={}, message={}",
                     config.variableCode, elapsedMs, uri, failureStage, ex.getClass().getSimpleName(), diagnosticMessage);
             return new RemoteInvokeResult(false, "第三方接口调用失败：" + diagnosticMessage, 0, elapsedMs,
-                    "", 0, JsonNodeFactory.instance.objectNode(), Collections.emptyList(), uri.toString(), new ArrayList<>(headers.keySet()),
+                    "", 0, JsonNodeFactory.instance.objectNode(), Collections.emptyList(), uri.toString(), new ArrayList<>(headers.toSingleValueMap().keySet()),
                     authHeaderApplied, authHeaderName, authTokenPresent, failureStage, ex.getClass().getSimpleName(), diagnosticMessage);
         }
     }

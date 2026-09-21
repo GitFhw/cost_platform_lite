@@ -30,7 +30,7 @@ import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService;
 import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService.InputBuildContext;
 import com.ruoyi.system.service.cost.variable.runtime.RuntimeRemoteVariableValueService;
 import com.ruoyi.system.service.cost.variable.runtime.RuntimeVariableComputeService;
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

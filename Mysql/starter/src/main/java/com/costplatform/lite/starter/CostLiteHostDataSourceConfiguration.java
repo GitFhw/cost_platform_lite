@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
@@ -22,13 +22,13 @@ import javax.sql.DataSource;
 @Conditional(CostLiteDataSourceModeCondition.Host.class)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 public class CostLiteHostDataSourceConfiguration {
-    @Bean(name = "costLiteDataSource")
+    @Bean(name = "costLiteDataSource", autowireCandidate = false, defaultCandidate = false)
     @ConditionalOnMissingBean(name = "costLiteDataSource")
     public DataSource costLiteDataSource(Environment environment,
                                          ConfigurableListableBeanFactory beanFactory) {
         String hostBeanName = environment.getProperty("cost.lite.datasource.host-bean-name", "dataSource");
         if ("costLiteDataSource".equals(hostBeanName) || !beanFactory.containsBean(hostBeanName)) {
-            throw new IllegalStateException("未配置 cost.lite.datasource.url，且宿主不存在名为 "
+            throw new IllegalStateException("cost.lite.datasource.mode=host 时，宿主不存在名为 "
                     + hostBeanName + " 的 DataSource Bean");
         }
         return beanFactory.getBean(hostBeanName, DataSource.class);

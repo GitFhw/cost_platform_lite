@@ -12,17 +12,17 @@ Jar 连接目标库中按 `Mysql/sql/cost-lite-schema.sql` 或 `Oracle/sql/cost-
 - 场景下费目维护。
 - 场景下要素和要素分组维护。
 - 费目规则、条件、阶梯、固定费率和表达式配置。
+- 基于费目要素类型生成动态费率矩阵：字典/布尔使用受控下拉，数值使用严格数字输入并支持比较符，文本使用文本输入；操作符按单元格保存，不再由客户手工拼接规则字符串。
 - 场景级公式资产维护、在线试算、版本查看和回退。
 - 发布前检查、创建版本和版本生效。
 - 输入模板、真实业务数据试算和试算结果预览。
 - 成功/失败试算日志，日志详情中保留输入、要素、解释和试算结果。
 
+动态矩阵只接纳低风险、可审计的要素类型。平台字典或业务字典必须先返回可用选项快照，停用选项保留用于历史显示但不可新选；数值列支持 `EQ/GT/GE/LT/LE`，字典、布尔和文本列默认只支持 `EQ`。日期、日期时间、每日时段、公式和高基数主数据继续走高级条件编辑器或宿主适配器，直到母体完成日期类型比较与时间段语义治理（详见母体缺陷清单 MCORE-002～004），不会在矩阵里伪装成普通文本。
+
 公式维护放在同一个工作台的“公式”页中，不新增第二套菜单。公式是按场景归属的独立资产，可维护中文业务口径、标准执行表达式、返回类型、状态、测试输入、版本和回退；规则仍负责适用条件和费率命中。公式页依赖运行端已有的 `cost_formula`、`cost_formula_version` 接口，删除该页只会撤掉维护入口，不会影响运行核心。
 
-后端支持两种等价部署入口，前端代码只切换一次路由模式：
-
-- `runtime`：宿主引入同进程 `cost-lite-starter-mysql`/`cost-lite-starter-oracle`，或前端直连独立 Jar，调用母体兼容路径。
-- `proxy`：旧版 HTTP Starter 在宿主暴露稳定代理路径，前端调用代理协议；Jar 地址和令牌只留在服务端。
+后端支持同进程 Starter、独立 Jar 和 HTTP 代理；前端统一通过 transport 访问稳定的 `/cost/**` 接口，不绑定某个宿主路由或权限实现。
 
 Oracle 和 MySQL 的差异只在后端运行 Jar 与初始化 SQL；两套 Jar 都提供相同的工作台接口语义，业务项目不需要为数据库类型复制一套页面。
 
@@ -40,6 +40,10 @@ Oracle 和 MySQL 的差异只在后端运行 Jar 与初始化 SQL；两套 Jar �
 ```text
 src/vendor/cost-lite-ui/
 ├─ CostLiteWorkbench.vue
+├─ RateMatrixEditor.vue
+├─ rateMatrix.js
+├─ operatorPolicy.js
+├─ ConditionValueEditor.vue
 ├─ costLiteApi.ts
 └─ index.ts
 ```
@@ -58,10 +62,7 @@ import {
   createCostLiteApi,
 } from "@/vendor/cost-lite-ui";
 
-const costLiteApi = createCostLiteApi(
-  (config) => request(config),
-  { basePath: "/cost", routeMode: "runtime" },
-);
+const costLiteApi = createCostLiteApi((config) => request(config), { basePath: "/cost" });
 </script>
 
 <template>
@@ -69,7 +70,7 @@ const costLiteApi = createCostLiteApi(
 </template>
 ```
 
-上面的 `runtime` 配置适用于同进程 Starter。若宿主使用 `backend-integration` 的 HTTP 代理，改成 `routeMode: "proxy"`。
+`basePath` 只填写宿主浏览器实际访问的计费根路径；同进程 Starter、独立 Jar 和 HTTP 代理都通过宿主的 transport 统一适配。
 
 如果目标项目需要调整中文名称或可选值，直接修改目标轻量库中的对应字典数据即可，工作台刷新后自动生效：
 
@@ -81,35 +82,31 @@ GET /cost/dictionary/options?types=cost_business_domain,cost_scene_status,cost_r
 
 已有 AG Vue 3 项目的实际包装示例见 `Front/examples/ag-vue3-page.vue`。
 
-如果业务服务不引入 Starter，而是由独立 Jar 直接提供计费接口，使用同一个工作台只需切换路由模式：
+如果业务服务不引入 Starter，而是由独立 Jar 直接提供计费接口，仍然使用同一个工作台，只需让 transport 指向该 Jar 的稳定路径：
 
 ```ts
 const costLiteApi = createCostLiteApi(
   (config) => request(config),
-  {
-    basePath: "/cost",
-    routeMode: "runtime",
-  },
+  { basePath: "/cost" },
 );
 ```
 
 ## 5. 确定 `basePath`
 
-| 路由模式 | 部署方式 | `basePath` 示例 |
-| --- | --- | --- |
-| `runtime` | 同进程 Starter 或独立 Jar | `/cost` |
-| `proxy` | HTTP Starter 宿主服务 | `/cost` |
-| `proxy` | 网关按服务名转发 | `/business/cost` |
-| `proxy` | 网关统一 API 前缀 | `/api/business/cost` |
+| 部署方式 | `basePath` 示例 |
+| --- | --- |
+| 同进程 Starter 或独立 Jar | `/cost` |
+| HTTP Starter 宿主服务 | `/cost` |
+| 网关按服务名转发 | `/business/cost` |
+| 网关统一 API 前缀 | `/api/business/cost` |
 
-`basePath` 始终填写浏览器实际访问的路径，不填写 `http://host:port` 形式的 Jar 地址。独立 Jar 的真实路由由 `runtime` 模式集中转换，调用方不用手工维护场景、费目、要素、规则等接口地址。
+`basePath` 始终填写浏览器实际访问的路径，不填写 `http://host:port` 形式的 Jar 地址；调用方不用手工维护场景、费目、要素、规则等接口地址。
 
 如果独立 Jar 或同进程 Starter 被网关挂在 `/business/cost`，仍然只改 `basePath`：
 
 ```ts
 {
   basePath: "/business/cost",
-  routeMode: "runtime",
 }
 ```
 
@@ -152,7 +149,9 @@ interface CostLiteRequest {
 
 工作台不提供同步计费、正式任务提交或正式结果台账页面。同步计费是业务系统后端的生产调用接口，工作台只用试算验证配置是否能处理真实业务数据。
 
-对于货种、客户、船舶等高基数要素，运行请求建议直接传业务编码和必要的分类字段。当前运行 Jar 的 `REMOTE` 要素从请求里的 `remoteContext`、`remotePayload` 或 `remoteData` 读取已经准备好的值；`remoteApi` 可用于远程连接测试和数据预览，但不会在每笔计费时自动发起外部 HTTP。配置页面需要名称下拉时，应由宿主提供关键词分页接口并在页面包装层接入，工作台默认仍保存编码文本，这样不会把客户业务库或大数据量主数据耦合进通用前端。
+对于货种、客户、船舶等高基数要素，宿主应在变量上配置 `BUSINESS_DICT` 或 `BUSINESS_MASTER` 选项来源，并实现后端 `CostLiteOptionProvider`，返回编码、名称、禁用状态和分页信息；工作台只保存稳定编码，不把业务表复制进轻量库。平台字典使用 `PLATFORM_DICT`，从当前计费库的 `cost_*` 字典读取。
+
+接入业务选项时，变量的运行时 `sourceType` 与规则编辑器的 `optionSourceType` 必须分开：业务字典通常是 `sourceType=INPUT`、`optionSourceType=BUSINESS_DICT`，不能把宿主业务字典误标成轻量平台 `DICT`。后端会复核目录编码、停用选项和配置 JSON。
 
 ## 9. 构建验证
 

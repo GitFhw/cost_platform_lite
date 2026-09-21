@@ -9,13 +9,10 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>cost-lite-mysql</name>
-    <description>MySQL 轻量计费核心、独立运行入口和嵌入式集成聚合工程</description>
+    <description>MySQL 轻量计费核心和同进程嵌入式 Starter 聚合工程</description>
 
     <modules>
         <module>source</module>
-        <module>isolated</module>
         <module>starter</module>
-        <module>example</module>
-        <module>server</module>
     </modules>
 </project>

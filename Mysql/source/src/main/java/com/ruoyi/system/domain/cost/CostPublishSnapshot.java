@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.io.Serializable;

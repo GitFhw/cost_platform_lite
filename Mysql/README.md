@@ -2,25 +2,26 @@
 
 接口字段、场景级调用、指定费目调用和 Java/cURL 示例见：[Mysql/API.md](API.md)。
 
-本分支推荐的同进程接入请先阅读：[EMBEDDED.md](EMBEDDED.md)。Java 8 + Spring Boot 2.7 Servlet 项目只添加 `com.costplatform.lite:cost-lite-starter-mysql`，计费入口和核心会自动注册到业务应用，不需要单独启动 Lite 服务。
+本分支当前交付基线是同进程嵌入，请先阅读：[EMBEDDED.md](EMBEDDED.md)。Java 17 + Spring Boot 4.1 Servlet 项目只添加 `com.costplatform.lite:cost-lite-starter-mysql`，计费入口和核心会自动注册到业务应用，不需要单独启动 Lite 服务。
+
+> 当前 AG-PRODUCT 集成只使用 `source` 和 `starter` 两个制品。`server/`、`isolated/`、`backend-integration/` 及本文件中对应的旧 HTTP/独立服务章节仅作为历史兼容资料，不参与默认聚合构建，也不得与当前嵌入 Starter 同时引入。
 
 ## 1. 适用范围
 
-本目录适用于以下两类数据库落位和两种运行方式：
+本目录当前适用于以下两类数据库落位和一种运行方式：
 
 1. 独立 MySQL 库：轻量计费使用单独数据库，推荐用于标准交付。
 2. 业务 MySQL 库：把 `cost_*` 表初始化到业务库，适用于基础设施受限的项目。
 
-运行方式按宿主兼容性选择：
-
-1. 嵌入模式：`cost-lite-starter-mysql` 自动带入 `cost-lite-core-mysql`，在业务 JVM 内注册母体兼容 `/cost/**`。
-2. 独立服务模式：`cost-lite-server` 单独运行；Spring Boot 2.x 宿主可用 HTTP Starter 代理，非 Boot/传统 SSM 宿主直接用无 Spring `cost-lite-client` 调用，均适用于 Java 8 项目。
-
-两种方式使用同一套表名和字段。区别只有 JDBC 地址，不需要修改计费实体或 Starter。
+运行方式固定为嵌入模式：`cost-lite-starter-mysql` 自动带入 `cost-lite-core-mysql`，在业务 JVM 内注册
+`/cost/**`；同一业务系统只能选择专用计费库或宿主业务库其中一种数据源落位。旧独立服务和 HTTP
+客户端资料不属于当前交付，不与嵌入 Starter 混用。
 
 ### 1.1 配置归属和组件职责
 
-数据库账号密码不打进 Jar，也不写入 Git。嵌入模式由业务应用读取 `cost.lite.datasource.*`：配置专用 JDBC URL 时建立 Lite 独立连接池，省略 URL 时复用宿主 `DataSource`；独立服务模式则由 `cost-lite-server` 读取 `spring.datasource`。旧版 HTTP Starter 不读取数据库配置，只负责把请求转给独立 MySQL 服务。
+数据库账号密码不打进 Jar，也不写入 Git。当前交付默认使用独立核算库，业务应用必须提供 `COST_LITE_DB_URL`、`COST_LITE_DB_USERNAME` 和 `COST_LITE_DB_PASSWORD`，并使用 `cost.lite.datasource.mode=dedicated`；同库版必须明确使用 `mode=host` 并配置宿主 Bean。Starter 不再仅根据 URL 是否为空猜测模式。分离版业务库不执行核算表 DDL，同库版才在业务库执行对应 SQL。旧独立服务和 HTTP Starter 的配置不属于当前嵌入集成。
+
+嵌入后首次验证必须先访问 `/cost/lite/health`。若 `database=DOWN`，先检查实际生效的 `cost.lite.datasource.url`、账号、密码和 `cost-lite-starter-mysql` 版本；不要只看业务接口的 MyBatis 异常。业务项目使用本地 Maven 仓库时，必须重新安装 Starter，使它传递的 Core 与当前版本一致。
 
 因此两种部署的配置边界如下：
 
@@ -31,15 +32,12 @@
 | 旧版 HTTP Starter | MySQL Jar 地址、代理路径、超时、令牌 | 否 |
 | `Front/` 工作台 | `/cost` 或 `/cost` 路由模式 | 否 |
 
-当前推荐的正式接入形态是“业务项目 + `cost-lite-starter-mysql` + 选定的数据源落位”。`cost-lite-starter-mysql` 是入口，`cost-lite-core-mysql` 是随 Maven 传递引入的核心；两者均不需要单独启动。仓库内的 `source/` 仅供我们维护核心，客户迁移不需要复制。旧项目仍可使用“HTTP Starter + `cost-lite-server`”兼容方案。
+当前正式接入形态是“业务项目 + `cost-lite-starter-mysql` + 选定的数据源落位”。`cost-lite-starter-mysql` 是入口，`cost-lite-core-mysql` 是随 Maven 传递引入的核心；两者均不需要单独启动。仓库内的 `source/` 仅供维护核心，客户迁移不需要复制源码。
 
 ## 2. 环境要求
 
-- 嵌入式 `cost-lite-starter-mysql`：Java 8、Spring Boot 2.7 Servlet 应用。
-- 独立 `cost-lite-server-mysql`：Java 8 运行环境即可。
+- 嵌入式 `cost-lite-starter-mysql`：Java 17、Spring Boot 4.1 Servlet 应用。
 - 数据库：MySQL 8.0+，字符集 `utf8mb4`。
-- 无 Spring `cost-lite-client`：Java 8+，适用于传统 SSM、非 Spring Boot 或其他 Java 服务。
-- 旧版 HTTP Starter 宿主：Java 8+、Spring Boot 2.7 Servlet 应用。
 - 宿主前端：Vue 3、Element Plus。前端接入见 `../Front/README.md`。
 
 ## 3. 初始化数据库
@@ -58,7 +56,7 @@ mysql -h 127.0.0.1 -P 3306 -u root -p cost_platform_lite < Mysql/sql/cost-lite-s
 
 ### 3.2 复用业务库
 
-先备份业务库并确认不存在同名 `cost_*` 表，然后把脚本执行到业务库：
+仅同库版先备份业务库并确认不存在同名 `cost_*` 表，然后把脚本执行到业务库；分离版不要在业务库执行此脚本：
 
 ```bash
 mysql -h 127.0.0.1 -P 3306 -u app_user -p business_db < Mysql/sql/cost-lite-schema.sql
@@ -81,7 +79,7 @@ where table_schema = database()
 
 默认应包含场景、费目、要素、条件组、规则、公式、发布、试算记录和审计相关表；不应因为默认脚本而出现 `cost_calc_task`、`cost_result_ledger`、`cost_result_trace`、`cost_open_app` 等可选表。启用正式能力后，再检查可选脚本中的对应表。
 
-## 4. 兼容模式：启动独立计费服务 Jar
+## 4. 历史兼容资料：启动独立计费服务 Jar（不属于当前交付）
 
 运行制品位于：
 
@@ -156,9 +154,10 @@ java -jar .\Mysql\runtime\cost-lite-server-1.0.0.jar `
 mvn -f Mysql/pom.xml clean install -DskipTests
 ```
 
-该命令生成 `cost-lite-core-mysql`、`cost-lite-starter-mysql`、嵌入示例和兼容 `cost-lite-server-mysql`。嵌入交付只发布前两个普通 Jar；需要独立部署时，再使用 `Mysql/server/target/cost-lite-server.jar` 更新运行制品。`target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
+该命令只生成当前交付的 `cost-lite-core-mysql` 和 `cost-lite-starter-mysql` 两个制品。旧目录中的
+`cost-lite-server`、隔离 Jar 和 HTTP 客户端不参与默认聚合构建；`target/` 和其中的 `.class` 只属于本机构建目录，不提交 Git。
 
-## 5. 验证独立运行服务
+## 5. 历史独立服务验证（不属于当前交付）
 
 ```bash
 curl http://127.0.0.1:18080/cost/lite/health
@@ -192,7 +191,7 @@ curl http://127.0.0.1:18080/cost/lite/health
 
 然后配置 `cost.lite.datasource.url`、`username` 和 `password`。Starter 会自动注册计费 Controller、Service、Mapper 和事务，业务项目自身的 `spring.datasource` 保持不变。完整配置、验证命令和兼容边界见 [EMBEDDED.md](EMBEDDED.md)。
 
-## 7. 兼容模式：非 Boot Client 和 HTTP 宿主 Starter
+## 7. 历史兼容资料：非 Boot Client 和 HTTP 宿主 Starter（不属于当前交付）
 
 传统 SSM、非 Spring Boot 或其他 Java 8 服务只需要引用无 Spring 的 Client：
 
@@ -295,7 +294,9 @@ Starter 只注册代理 Controller，不接管宿主鉴权。应由宿主安全�
 
 ## 11. 字典差异处理
 
-计费数据库始终保存母体统一编码。工作台通过 `/cost/dictionary/options` 读取轻量库的 `sys_dict_data`，中文名称和可选值由数据库维护。目标项目的字典名称或值需要变化时，直接修改对应字典数据，不需要改前端代码，也不需要接入宿主字典表。Jar 默认使用轻量库字典校验：
+计费数据库始终保存稳定业务编码。工作台的“选项来源”与变量的“运行时取值来源”分开：运行时建议由业务系统传入 `INPUT` 编码，维护页再根据要素配置加载中文名称和可选值。
+
+`PLATFORM_DICT` 继续通过 `/cost/dictionary/options` 读取轻量库的 `sys_dict_data`，平台字典类型必须使用 `cost_` 前缀。`BUSINESS_DICT` 和 `BUSINESS_MASTER` 通过 `/cost/variable/options` 查询宿主适配器，前者适合业务小字典，后者适合国家地区、货名、港口等需要关键字分页的主数据；两者都不会把业务表复制到轻量库。
 
 ```yaml
 cost:
@@ -306,7 +307,9 @@ cost:
       allow-unconfigured-types: true
 ```
 
-其中 `SYSTEM` 指当前 Jar 连接的轻量库字典表，不是读取宿主数据库。只有确实要把宿主已有字典映射到计费统一编码时，才使用可选的 `CONFIG` 或 `CostDictionaryProvider` 扩展。
+其中 `SYSTEM` 指当前 Jar 连接的轻量库字典表，不是读取宿主数据库。宿主如果要提供业务选项，实现 `com.costplatform.lite.extension.CostLiteOptionProvider` Bean：`supports` 按 `optionSourceType + optionSourceCode` 路由，`query` 返回 `CostLiteOptionPage`。返回的 `value` 是规则保存的业务编码，`label` 只用于页面显示，`optionConfigJson` 只放字段映射或路由配置，不放业务数据明细。
+
+费目还需要单独执行“设置要素”。规则编辑器只展示当前费目已配置的要素，条件值选择器再依据该要素的选项来源显示平台字典、业务字典或业务主数据；规则后端会再次校验费目—要素关系，避免从整个场景变量池任意引用。
 
 ## 12. 接入前端
 
@@ -329,7 +332,7 @@ const costLiteApi = createCostLiteApi(
 );
 ```
 
-### 12.2 独立 Jar 直连
+### 12.2 历史独立 Jar 直连（不属于当前交付）
 
 如果业务系统不引入 Starter，而是通过同源反向代理或网关把独立 Jar 暴露为 `/cost`，只需切换一处配置：
 
@@ -486,7 +489,7 @@ curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
 
 货种、客户、船舶等数据量较大时，不要把全量数据初始化到 `sys_dict_data`，也不要在 `cost_*` 表复制业务主数据。计费输入只传业务编码，例如 `goodsCode`；如果规则需要业务系统补充分类，就由业务系统在调用计费核心前查询并同时传入 `goodsCategory`。当前轻量 Jar 的运行态 `REMOTE` 要素只解析请求中的 `remoteContext`、`remotePayload` 或 `remoteData`，不会在每笔计费时根据 `remoteApi` 自动发起外部 HTTP；`remoteApi` 目前用于连接测试、数据预览和保留母体配置兼容性。后续要做真正的实时自动取数，应由宿主先补齐远程上下文，或单独接入可插拔运行时取数适配器，并明确超时、缓存、失败兜底和批量合并策略。
 
-配置人员需要选择货种时，宿主页面提供受权限保护的分页搜索接口，例如 `GET /business/goods/options?keyword=钢&pageNum=1&pageSize=20&value=G001`，返回 `{ "rows": [{ "label": "钢材", "value": "G001" }], "total": 1 }`。工作台只保存编码到规则比较值，不直接访问客户数据库；当前页面保留文本输入作为零新增开发的默认路径，远程选项控件可以由宿主按此契约接入。
+配置人员需要选择货种时，宿主适配器从受权限保护的业务接口或业务表分页查询，例如 `GET /business/goods/options?keyword=钢&pageNum=1&pageSize=20&value=G001`，再转换成 `CostLiteOptionPage`。工作台只保存编码到规则比较值，不直接访问客户数据库；如果某个系统暂时不提供适配器，仍可使用文本输入保存业务编码。
 
 规则不要按所有维度做笛卡尔积。当前核心是同一费目按规则优先级从高到低命中第一条，规则组内条件为 AND，组间由 `conditionLogic` 决定；推荐“特殊组合覆盖 -> 单维度兜底 -> 无条件基础价”。例如只有确实影响价格时才组合“货种分类 + 内外贸 + 进出口”，货种编码优先归类后再参与规则；若必须维护数万条货种与价格映射，应通过可插拔的业务侧分类/价格适配器处理，不把映射硬塞进规则文本。
 
@@ -515,6 +518,8 @@ curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
 - [ ] 宿主 `/cost/health` 能代理成功。
 - [ ] 前端能加载场景列表（Starter 代理或 Jar 直连均可）。
 - [ ] 能新增场景、费目、要素、条件组、规则和公式。
+- [ ] 每个费目能单独设置要素，规则条件只展示当前费目的要素。
+- [ ] 平台字典、业务字典和业务主数据分别能按配置加载选项；规则保存的是业务编码。
 - [ ] 公式试算返回预期结果，公式版本可以查看和回退。
 - [ ] 发布前检查通过，版本可生效。
 - [ ] 正确输入能返回预期金额。
@@ -539,4 +544,4 @@ curl -H "X-Cost-Lite-Token: $ADMIN_TOKEN" \
 
 ### 业务系统字典不一致
 
-直接维护当前轻量库 `sys_dict_type`、`sys_dict_data` 中对应的计费字典名称和值，刷新工作台即可生效；不要修改计费表中的统一编码。只有明确需要复用宿主已有字典、且不把宿主字典表迁入轻量库时，才通过可插拔字典适配器处理映射。
+先确认变量的 `optionSourceType`：轻量平台字典使用 `PLATFORM_DICT` 和 `cost_*` 字典；宿主小字典使用 `BUSINESS_DICT`；国家地区、货名、港口等使用 `BUSINESS_MASTER`。业务类型必须填写宿主定义的 `optionSourceCode`，并提供 `CostLiteOptionProvider`；不要把宿主字典表或大数据表复制到轻量库，也不要修改规则中已经保存的业务编码。

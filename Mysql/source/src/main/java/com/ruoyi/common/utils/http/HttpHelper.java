@@ -1,6 +1,6 @@
 package com.ruoyi.common.utils.http;
 
-import javax.servlet.ServletRequest;
+import jakarta.servlet.ServletRequest;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

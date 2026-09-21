@@ -17,6 +17,9 @@ public class CostFeeVariableContractVo {
     private String variableSourceType;
     private String dataType;
     private String dataPath;
+    private String optionSourceType;
+    private String optionSourceCode;
+    private String optionConfigJson;
     private String variableStatus;
     private String relationType;
     private String sourceType;

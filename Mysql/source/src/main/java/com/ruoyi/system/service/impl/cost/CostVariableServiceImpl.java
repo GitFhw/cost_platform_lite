@@ -62,6 +62,8 @@ public class CostVariableServiceImpl implements ICostVariableService {
             RemoteVariableAccessPipeline.ADAPTER_SINGLE_OBJECT));
     private static final String REMOTE_TOKEN_PLACEHOLDER = "__PASTE_TOKEN_HERE__";
     private static final String REMOTE_SECRET_MASK = "******";
+    private static final Set<String> OPTION_SOURCE_TYPES = new LinkedHashSet<>(Arrays.asList(
+            "NONE", "PLATFORM_DICT", "BUSINESS_DICT", "BUSINESS_MASTER"));
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
@@ -308,6 +310,9 @@ public class CostVariableServiceImpl implements ICostVariableService {
         copied.setSourceType(source.getSourceType());
         copied.setSourceSystem(source.getSourceSystem());
         copied.setDictType(source.getDictType());
+        copied.setOptionSourceType(source.getOptionSourceType());
+        copied.setOptionSourceCode(source.getOptionSourceCode());
+        copied.setOptionConfigJson(source.getOptionConfigJson());
         copied.setRemoteApi(source.getRemoteApi());
         copied.setAuthType(source.getAuthType());
         copied.setAuthConfigJson(source.getAuthConfigJson());
@@ -616,6 +621,9 @@ public class CostVariableServiceImpl implements ICostVariableService {
         variable.setSourceType(StringUtils.defaultIfEmpty(StringUtils.trim(row.getSourceType()), "INPUT"));
         variable.setSourceSystem(StringUtils.trim(row.getSourceSystem()));
         variable.setDictType(StringUtils.trim(row.getDictType()));
+        variable.setOptionSourceType(StringUtils.trim(row.getOptionSourceType()));
+        variable.setOptionSourceCode(StringUtils.trim(row.getOptionSourceCode()));
+        variable.setOptionConfigJson(StringUtils.trim(row.getOptionConfigJson()));
         variable.setRemoteApi(StringUtils.trim(row.getRemoteApi()));
         variable.setAuthType(StringUtils.defaultIfEmpty(StringUtils.trim(row.getAuthType()), "NONE"));
         variable.setAuthConfigJson(StringUtils.trim(row.getAuthConfigJson()));
@@ -1001,18 +1009,84 @@ public class CostVariableServiceImpl implements ICostVariableService {
 
     private void validateVariableConfig(CostVariable variable) {
         variable.setSourceType(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getSourceType()), "INPUT"));
+        normalizeVariableOptionFields(variable);
         validateSceneEnabled(variable.getSceneId(), "变量");
         validateVariableGroup(variable.getSceneId(), variable.getGroupId());
         validateDictValueExists(DICT_TYPE_VARIABLE_TYPE, variable.getVariableType(), "变量类型");
         validateDictValueExists(DICT_TYPE_SOURCE_TYPE, variable.getSourceType(), "来源类型");
         validateDictValueExists(DICT_TYPE_DATA_TYPE, variable.getDataType(), "数据类型");
         validateDictValueExists(DICT_TYPE_VARIABLE_STATUS, variable.getStatus(), "变量状态");
+        validateVariableOptionConfig(variable);
         variableSourceHandlerChain.validate(variable, variableSourceHandlerSupport);
     }
 
     private void normalizeVariableSourceFields(CostVariable variable) {
         variable.setSourceType(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getSourceType()), "INPUT"));
         variableSourceHandlerChain.normalize(variable);
+    }
+
+    /**
+     * 规范化规则编辑器的选项来源。该来源与运行时 sourceType 有意分离，
+     * 这样业务系统字典可以作为 INPUT 变量的维护下拉，而不会被误当成轻量库字典。
+     */
+    private void normalizeVariableOptionFields(CostVariable variable) {
+        String optionSourceType = StringUtils.trim(variable.getOptionSourceType());
+        if (StringUtils.isEmpty(optionSourceType)) {
+            if ("DICT".equalsIgnoreCase(StringUtils.defaultString(variable.getSourceType()))
+                    || "DICT".equalsIgnoreCase(StringUtils.defaultString(variable.getVariableType())
+                    )) {
+                optionSourceType = "PLATFORM_DICT";
+            } else {
+                optionSourceType = "NONE";
+            }
+        }
+        variable.setOptionSourceType(optionSourceType.toUpperCase(Locale.ROOT));
+        variable.setOptionSourceCode(StringUtils.trim(variable.getOptionSourceCode()));
+        variable.setOptionConfigJson(StringUtils.trim(variable.getOptionConfigJson()));
+        if ("PLATFORM_DICT".equals(variable.getOptionSourceType())
+                && StringUtils.isEmpty(variable.getOptionSourceCode())) {
+            variable.setOptionSourceCode(StringUtils.trim(variable.getDictType()));
+        }
+        if ("NONE".equals(variable.getOptionSourceType())) {
+            variable.setOptionSourceCode("");
+            variable.setOptionConfigJson(null);
+        }
+    }
+
+    /**
+     * 校验选项来源配置，避免把业务目录误写成平台字典或把大表明细落入计费库。
+     */
+    private void validateVariableOptionConfig(CostVariable variable) {
+        String optionSourceType = StringUtils.defaultIfEmpty(StringUtils.trim(variable.getOptionSourceType()), "NONE")
+                .toUpperCase(Locale.ROOT);
+        if (!OPTION_SOURCE_TYPES.contains(optionSourceType)) {
+            throw new ServiceException("暂不支持的选项来源类型：" + optionSourceType
+                    + "，可选 PLATFORM_DICT、BUSINESS_DICT、BUSINESS_MASTER、NONE");
+        }
+        if (StringUtils.isNotEmpty(variable.getOptionConfigJson())) {
+            parseJsonObject(variable.getOptionConfigJson(), "选项配置JSON");
+        }
+        if ("PLATFORM_DICT".equals(optionSourceType)) {
+            if (!"DICT".equalsIgnoreCase(StringUtils.defaultString(variable.getSourceType()))) {
+                throw new ServiceException("轻量平台字典选项必须使用 DICT 运行来源；业务系统字典请改用 BUSINESS_DICT + INPUT");
+            }
+            if (StringUtils.isEmpty(variable.getDictType())) {
+                throw new ServiceException("轻量平台字典选项必须配置字典类型");
+            }
+            validateDictTypeExists(variable.getDictType());
+            if (StringUtils.isEmpty(variable.getOptionSourceCode())) {
+                variable.setOptionSourceCode(variable.getDictType());
+            }
+            return;
+        }
+        if (("BUSINESS_DICT".equals(optionSourceType) || "BUSINESS_MASTER".equals(optionSourceType))
+                && StringUtils.isEmpty(variable.getOptionSourceCode())) {
+            throw new ServiceException(optionSourceType + "必须配置业务选项目录编码；该编码由宿主业务系统适配器解释");
+        }
+        if (("BUSINESS_DICT".equals(optionSourceType) || "BUSINESS_MASTER".equals(optionSourceType))
+                && "DICT".equalsIgnoreCase(StringUtils.defaultString(variable.getSourceType()))) {
+            throw new ServiceException("业务字典/业务主数据不能使用轻量平台 DICT 运行来源，请以 INPUT 编码传入");
+        }
     }
 
     private RemoteVariableConfig resolveRemoteVariableConfig(Map<String, Object> request, CostVariable variable) {

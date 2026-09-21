@@ -28,7 +28,7 @@ public class CostLiteHostDataSourceConfiguration {
                                          ConfigurableListableBeanFactory beanFactory) {
         String hostBeanName = environment.getProperty("cost.lite.datasource.host-bean-name", "dataSource");
         if ("costLiteDataSource".equals(hostBeanName) || !beanFactory.containsBean(hostBeanName)) {
-            throw new IllegalStateException("未配置 cost.lite.datasource.url，且宿主不存在名为 "
+            throw new IllegalStateException("cost.lite.datasource.mode=host 时，宿主不存在名为 "
                     + hostBeanName + " 的 DataSource Bean");
         }
         return beanFactory.getBean(hostBeanName, DataSource.class);

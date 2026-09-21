@@ -76,6 +76,9 @@ public class CostRuleServiceImpl implements ICostRuleService {
     private CostFormulaMapper formulaMapper;
 
     @Autowired
+    private CostFeeVariableRelMapper feeVariableRelMapper;
+
+    @Autowired
     private ICostExpressionService expressionService;
 
     @Autowired
@@ -241,8 +244,9 @@ public class CostRuleServiceImpl implements ICostRuleService {
         CostRuleSaveBo rule = request.getRule();
         Long sceneId = resolveSceneId(rule);
         validateVariableReference(sceneId, rule.getQuantityVariableCode(), "计量变量");
+        validateFeeVariableReference(rule.getFeeId(), sceneId, rule.getQuantityVariableCode(), "计量变量");
         validatePricing(rule);
-        validateConditions(sceneId, rule.getConditions());
+        validateConditions(sceneId, rule.getFeeId(), rule.getConditions());
         validateTiers(rule);
 
         CostVariable quantityVariable = StringUtils.isEmpty(rule.getQuantityVariableCode())
@@ -541,8 +545,9 @@ public class CostRuleServiceImpl implements ICostRuleService {
     private CostRule buildAndValidateRule(CostRuleSaveBo request, boolean update) {
         Long sceneId = resolveSceneId(request);
         validateVariableReference(sceneId, request.getQuantityVariableCode(), "计量变量");
+        validateFeeVariableReference(request.getFeeId(), sceneId, request.getQuantityVariableCode(), "计量变量");
         validatePricing(request);
-        validateConditions(sceneId, request.getConditions());
+        validateConditions(sceneId, request.getFeeId(), request.getConditions());
         validateTiers(request);
 
         CostRule entity = new CostRule();
@@ -637,7 +642,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
      * <p>
      * 条件编码必须来源于变量中心，避免页面自由输入导致规则口径漂移。
      */
-    private void validateConditions(Long sceneId, List<CostRuleCondition> conditions) {
+    private void validateConditions(Long sceneId, Long feeId, List<CostRuleCondition> conditions) {
         if (conditions == null) {
             return;
         }
@@ -647,6 +652,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
                 throw new ServiceException(String.format("第%1$d条条件未选择变量", index));
             }
             validateVariableReference(sceneId, condition.getVariableCode(), String.format("第%1$d条条件变量", index));
+            validateFeeVariableReference(feeId, sceneId, condition.getVariableCode(), String.format("第%1$d条条件变量", index));
             if (StringUtils.isEmpty(condition.getOperatorCode())) {
                 throw new ServiceException(String.format("第%1$d条条件未选择操作符", index));
             }
@@ -725,6 +731,29 @@ public class CostRuleServiceImpl implements ICostRuleService {
                 .eq(CostVariable::getVariableCode, variableCode));
         if (count == null || count <= 0) {
             throw new ServiceException(fieldLabel + "不存在，请先在变量中心维护后再引用");
+        }
+    }
+
+    /**
+     * 规则只能引用当前费目已经配置或已经被历史规则派生的要素，
+     * 防止页面从整个场景变量池任意取值导致费目口径漂移。
+     */
+    private void validateFeeVariableReference(Long feeId, Long sceneId, String variableCode, String fieldLabel) {
+        if (feeId == null || StringUtils.isEmpty(variableCode)) {
+            return;
+        }
+        CostVariable variable = variableMapper.selectOne(Wrappers.<CostVariable>lambdaQuery()
+                .eq(CostVariable::getSceneId, sceneId)
+                .eq(CostVariable::getVariableCode, StringUtils.trim(variableCode))
+                .last("limit 1"));
+        if (variable == null || variable.getVariableId() == null) {
+            return;
+        }
+        Long count = feeVariableRelMapper.selectCount(Wrappers.<CostFeeVariableRel>lambdaQuery()
+                .eq(CostFeeVariableRel::getFeeId, feeId)
+                .eq(CostFeeVariableRel::getVariableId, variable.getVariableId()));
+        if (count == null || count <= 0) {
+            throw new ServiceException(fieldLabel + "未配置在当前费目的要素清单中，请先执行“设置要素”");
         }
     }
 

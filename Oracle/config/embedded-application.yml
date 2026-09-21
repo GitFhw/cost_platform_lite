@@ -1,5 +1,6 @@
 # 业务项目嵌入 cost-lite-starter-oracle 的配置模板。
-# 数据库密码请使用环境变量或配置中心提供，不要把真实值提交到 Git。
+# 默认使用独立核算库；同库部署必须显式设置 COST_LITE_DATASOURCE_MODE=host 并提供宿主 Bean。
+# 核算库地址、账号和密码必须由环境变量或配置中心提供，不要把真实值提交到 Git。
 cost:
   lite:
     embedded:
@@ -14,8 +15,10 @@ cost:
       validation-enabled: ${COST_LITE_DICTIONARY_VALIDATION_ENABLED:true}
       allow-unconfigured-types: ${COST_LITE_DICTIONARY_ALLOW_UNCONFIGURED_TYPES:true}
     datasource:
+      mode: ${COST_LITE_DATASOURCE_MODE:dedicated}
+      host-bean-name: ${COST_LITE_HOST_DATASOURCE_BEAN:dataSource}
       driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
-      url: ${COST_LITE_DB_URL:jdbc:oracle:thin:@//127.0.0.1:1521/FREEPDB1}
+      url: ${COST_LITE_DB_URL:}
       username: ${COST_LITE_DB_USERNAME:}
       password: ${COST_LITE_DB_PASSWORD:}
       hikari:
@@ -24,7 +27,7 @@ cost:
         maximum-pool-size: ${COST_LITE_DB_MAX_POOL_SIZE:10}
         connection-timeout: ${COST_LITE_DB_CONNECTION_TIMEOUT:5000}
         validation-timeout: 3000
-        initialization-fail-timeout: -1
+        initialization-fail-timeout: ${COST_LITE_DB_INITIALIZATION_FAIL_TIMEOUT:5000}
 
   dispatch:
     enabled: ${COST_LITE_DISPATCH_ENABLED:false}

@@ -4,10 +4,10 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.ruoyi.lite.config.CostLiteOracleSqlInterceptor;
 import com.ruoyi.lite.config.CostLiteProperties;
-import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.type.JdbcType;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,16 +30,19 @@ import javax.sql.DataSource;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "cost.lite.embedded", name = "enabled", havingValue = "true", matchIfMissing = true)
 @ConditionalOnBean(name = "costLiteDataSource")
-@MapperScan(basePackages = "com.ruoyi.system.mapper", sqlSessionFactoryRef = "costLiteSqlSessionFactory")
+@MapperScan(
+        basePackages = "com.ruoyi.system.mapper",
+        nameGenerator = CostLiteMapperBeanNameGenerator.class,
+        sqlSessionFactoryRef = "costLiteSqlSessionFactory")
 public class CostLiteEmbeddedPersistenceConfiguration {
     @Bean(name = "costLiteSqlSessionFactory")
     @ConditionalOnMissingBean(name = "costLiteSqlSessionFactory")
-    public SqlSessionFactory costLiteSqlSessionFactory(
-            @Qualifier("costLiteDataSource") DataSource dataSource) throws Exception {
+    public Object costLiteSqlSessionFactory(
+            ConfigurableListableBeanFactory beanFactory) throws Exception {
+        DataSource dataSource = getCostLiteDataSource(beanFactory);
         MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(dataSource);
-        factory.setTypeAliasesPackage("com.costplatform.lite.internal.ruoyi.system.domain,"
-                + "com.costplatform.lite.internal.ruoyi.common.core.domain");
+        factory.setTypeAliasesPackage("com.ruoyi.system.domain,com.ruoyi.common.core.domain");
         Resource[] mapperResources = new PathMatchingResourcePatternResolver()
                 .getResources("classpath*:cost-lite/mapper/**/*Mapper.xml");
         factory.setMapperLocations(mapperResources);
@@ -56,8 +59,8 @@ public class CostLiteEmbeddedPersistenceConfiguration {
     @Bean(name = "costLiteTransactionManager")
     @ConditionalOnMissingBean(name = "costLiteTransactionManager")
     public PlatformTransactionManager costLiteTransactionManager(
-            @Qualifier("costLiteDataSource") DataSource dataSource) {
-        return new DataSourceTransactionManager(dataSource);
+            ConfigurableListableBeanFactory beanFactory) {
+        return new DataSourceTransactionManager(getCostLiteDataSource(beanFactory));
     }
 
     @Bean(name = "costLiteTransactionTemplate")
@@ -67,7 +70,7 @@ public class CostLiteEmbeddedPersistenceConfiguration {
         return new TransactionTemplate(transactionManager);
     }
 
-    private boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
+    private DataSource getCostLiteDataSource(ConfigurableListableBeanFactory beanFactory) {
+        return beanFactory.getBean("costLiteDataSource", DataSource.class);
     }
 }

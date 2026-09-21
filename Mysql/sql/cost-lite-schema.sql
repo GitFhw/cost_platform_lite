@@ -91,6 +91,9 @@ create table if not exists cost_variable (
   source_type               varchar(32)     not null comment '变量来源，例如INPUT、DICT、REMOTE、FORMULA',
   source_system             varchar(64)     default '' comment '来源系统标识，例如 WMS、ERP、TMS',
   dict_type                 varchar(64)     default '' comment '字典类型，当变量来源为字典时使用',
+  option_source_type        varchar(32)     default 'NONE' comment '规则编辑器选项来源，例如NONE、PLATFORM_DICT、BUSINESS_DICT、BUSINESS_MASTER',
+  option_source_code        varchar(128)    default '' comment '宿主业务字典或主数据目录编码',
+  option_config_json        json            default null comment '选项提供方扩展配置，不保存业务主数据明细',
   remote_api                varchar(255)    default '' comment '远程接口地址或标识，当变量来源为接口时使用',
   request_method            varchar(16)     default 'GET' comment '第三方接口请求方式，例如GET、POST、PUT、DELETE',
   content_type              varchar(128)    default 'application/json' comment '第三方接口请求内容类型',
@@ -453,6 +456,7 @@ from (
   union all select '核算-要素分组状态', 'cost_variable_group_status', '要素分组状态'
   union all select '核算-要素类型', 'cost_variable_type', '要素展示和处理类型'
   union all select '核算-要素来源类型', 'cost_variable_source_type', '要素取值来源'
+  union all select '核算-要素选项来源类型', 'cost_variable_option_source_type', '规则编辑器加载要素选项的来源'
   union all select '核算-要素数据类型', 'cost_variable_data_type', '要素数据类型'
   union all select '核算-变量鉴权方式', 'cost_variable_auth_type', '远程要素鉴权方式'
   union all select '核算-变量同步方式', 'cost_variable_sync_mode', '远程要素同步方式'
@@ -514,6 +518,10 @@ from (
   union all select 2, '字典接入', 'DICT', 'cost_variable_source_type', 'success', 'N', '从字典读取'
   union all select 3, '第三方接口', 'REMOTE', 'cost_variable_source_type', 'warning', 'N', '从远程接口读取'
   union all select 4, '公式派生', 'FORMULA', 'cost_variable_source_type', 'info', 'N', '由公式派生'
+  union all select 1, '无选项', 'NONE', 'cost_variable_option_source_type', 'info', 'Y', '使用手工输入或运行上下文值'
+  union all select 2, '轻量平台字典', 'PLATFORM_DICT', 'cost_variable_option_source_type', 'success', 'N', '从轻量计费库 cost_* 字典加载'
+  union all select 3, '业务系统字典', 'BUSINESS_DICT', 'cost_variable_option_source_type', 'warning', 'N', '由宿主业务系统字典适配器加载'
+  union all select 4, '业务主数据', 'BUSINESS_MASTER', 'cost_variable_option_source_type', 'primary', 'N', '由宿主业务系统分页主数据适配器加载'
   union all select 1, '字符串', 'STRING', 'cost_variable_data_type', 'primary', 'Y', '字符串数据'
   union all select 2, '数值', 'NUMBER', 'cost_variable_data_type', 'success', 'N', '数值数据'
   union all select 3, '布尔', 'BOOLEAN', 'cost_variable_data_type', 'warning', 'N', '布尔数据'

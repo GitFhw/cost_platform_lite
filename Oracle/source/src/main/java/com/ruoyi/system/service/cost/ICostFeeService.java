@@ -2,6 +2,8 @@ package com.ruoyi.system.service.cost;
 
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
+import com.ruoyi.system.domain.vo.CostFeeVariableContractVo;
+import com.ruoyi.system.domain.vo.CostFeeVariableRelSaveRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -56,6 +58,12 @@ public interface ICostFeeService {
      * @return 结果
      */
     CostFeeGovernanceCheckVo selectFeeGovernanceCheck(Long feeId);
+
+    /** Query the variable input contract for a fee. */
+    List<CostFeeVariableContractVo> selectFeeVariableContracts(Long feeId);
+
+    /** Replace manual fee-variable relations while preserving rule-derived relations. */
+    int replaceFeeVariableContracts(Long feeId, List<CostFeeVariableRelSaveRequest> requests, String operator);
 
     /**
      * 校验费用编码是否唯一

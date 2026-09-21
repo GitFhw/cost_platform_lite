@@ -140,6 +140,30 @@ public class CostVariable extends BaseEntity {
     private String dictType;
 
     /**
+     * 规则编辑器选项来源类型。该字段与 sourceType 分离：sourceType 表示运行时取值来源，
+     * optionSourceType 只表示维护规则时从哪里加载可选值。
+     */
+    @Excel(name = "选项来源类型")
+    @TableField("option_source_type")
+    @Size(max = 32, message = "选项来源类型长度不能超过32个字符")
+    private String optionSourceType;
+
+    /**
+     * 宿主侧字典或业务主数据目录编码。
+     */
+    @Excel(name = "选项目录编码")
+    @TableField("option_source_code")
+    @Size(max = 128, message = "选项目录编码长度不能超过128个字符")
+    private String optionSourceCode;
+
+    /**
+     * 选项提供方的扩展配置 JSON，不存放业务主数据明细。
+     */
+    @Excel(name = "选项配置JSON")
+    @TableField("option_config_json")
+    private String optionConfigJson;
+
+    /**
      * 远程接口地址
      */
     @Excel(name = "远程接口")

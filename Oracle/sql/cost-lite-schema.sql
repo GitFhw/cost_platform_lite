@@ -115,6 +115,9 @@ CREATE TABLE cost_variable (
   source_type               VARCHAR2(32 CHAR)     not null,
   source_system             VARCHAR2(64 CHAR)     DEFAULT NULL,
   dict_type                 VARCHAR2(64 CHAR)     DEFAULT NULL,
+  option_source_type        VARCHAR2(32 CHAR)     DEFAULT 'NONE',
+  option_source_code        VARCHAR2(128 CHAR)    DEFAULT NULL,
+  option_config_json        CLOB                  DEFAULT NULL,
   remote_api                VARCHAR2(255 CHAR)    DEFAULT NULL,
   request_method            VARCHAR2(16 CHAR)     default 'GET',
   content_type              VARCHAR2(128 CHAR)    default 'application/json',
@@ -890,6 +893,7 @@ USING (
   UNION ALL SELECT '核算-要素分组状态', 'cost_variable_group_status', '要素分组状态' FROM dual
   UNION ALL SELECT '核算-要素类型', 'cost_variable_type', '要素展示和处理类型' FROM dual
   UNION ALL SELECT '核算-要素来源类型', 'cost_variable_source_type', '要素取值来源' FROM dual
+  UNION ALL SELECT '核算-要素选项来源类型', 'cost_variable_option_source_type', '规则编辑器加载要素选项的来源' FROM dual
   UNION ALL SELECT '核算-要素数据类型', 'cost_variable_data_type', '要素数据类型' FROM dual
   UNION ALL SELECT '核算-变量鉴权方式', 'cost_variable_auth_type', '远程要素鉴权方式' FROM dual
   UNION ALL SELECT '核算-变量同步方式', 'cost_variable_sync_mode', '远程要素同步方式' FROM dual
@@ -950,6 +954,10 @@ USING (
   UNION ALL SELECT 2, '字典接入', 'DICT', 'cost_variable_source_type', 'success', 'N', '从字典读取' FROM dual
   UNION ALL SELECT 3, '第三方接口', 'REMOTE', 'cost_variable_source_type', 'warning', 'N', '从远程接口读取' FROM dual
   UNION ALL SELECT 4, '公式派生', 'FORMULA', 'cost_variable_source_type', 'info', 'N', '由公式派生' FROM dual
+  UNION ALL SELECT 1, '无选项', 'NONE', 'cost_variable_option_source_type', 'info', 'Y', '使用手工输入或运行上下文值' FROM dual
+  UNION ALL SELECT 2, '轻量平台字典', 'PLATFORM_DICT', 'cost_variable_option_source_type', 'success', 'N', '从轻量计费库 cost_* 字典加载' FROM dual
+  UNION ALL SELECT 3, '业务系统字典', 'BUSINESS_DICT', 'cost_variable_option_source_type', 'warning', 'N', '由宿主业务系统字典适配器加载' FROM dual
+  UNION ALL SELECT 4, '业务主数据', 'BUSINESS_MASTER', 'cost_variable_option_source_type', 'primary', 'N', '由宿主业务系统分页主数据适配器加载' FROM dual
   UNION ALL SELECT 1, '字符串', 'STRING', 'cost_variable_data_type', 'primary', 'Y', '字符串数据' FROM dual
   UNION ALL SELECT 2, '数值', 'NUMBER', 'cost_variable_data_type', 'success', 'N', '数值数据' FROM dual
   UNION ALL SELECT 3, '布尔', 'BOOLEAN', 'cost_variable_data_type', 'warning', 'N', '布尔数据' FROM dual

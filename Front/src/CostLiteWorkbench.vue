@@ -36,9 +36,22 @@ import {
   type CostLiteApi,
   type CostLiteRecord,
   type CostLiteDictionary,
+  type CostLiteDictionaryOption,
   type CostLitePage,
 } from "./costLiteApi";
 import ConditionValueEditor from "./ConditionValueEditor.vue";
+import RateMatrixEditor from "./RateMatrixEditor.vue";
+import { NUMERIC_DATA_TYPES, operatorOptionsForVariable } from "./operatorPolicy.js";
+import {
+  MATRIX_OPTION_LIMIT,
+  createEmptyMatrixRow,
+  isMatrixCompatibleRule,
+  isStrictFiniteDecimal,
+  matrixColumnsFromVariables,
+  matrixRowToRulePayload,
+  ruleToMatrixRow,
+  validateMatrixRows,
+} from "./rateMatrix.js";
 
 const DICTIONARY_TYPES = [
   "cost_business_domain",
@@ -49,6 +62,7 @@ const DICTIONARY_TYPES = [
   "cost_variable_group_status",
   "cost_variable_type",
   "cost_variable_source_type",
+  "cost_variable_option_source_type",
   "cost_variable_data_type",
   "cost_variable_auth_type",
   "cost_variable_sync_mode",
@@ -102,6 +116,7 @@ const loading = reactive({
   precheck: false,
   template: false,
   saving: false,
+  matrix: false,
   running: false,
   publishing: false,
 });
@@ -115,11 +130,21 @@ const selectedSceneId = ref<number | string>();
 const fees = ref<CostLiteRecord[]>([]);
 const selectedFeeId = ref<number | string>();
 const variables = ref<CostLiteRecord[]>([]);
+const feeVariableContracts = ref<CostLiteRecord[]>([]);
 const variableGroups = ref<CostLiteRecord[]>([]);
 const rules = ref<CostLiteRecord[]>([]);
 const versions = ref<CostLiteRecord[]>([]);
 const formulaOptions = ref<CostLiteRecord[]>([]);
 const feeGovernance = ref<CostLiteRecord>({});
+const variableOptionMap = ref<Record<string, CostLiteDictionaryOption[]>>({});
+const variableOptionPageMap = ref<Record<string, {
+  total: number;
+  hasMore: boolean;
+  hasPageMetadata: boolean;
+  hasOptionSnapshot: boolean;
+}>>({});
+const variableOptionLoading = ref<Record<string, boolean>>({});
+const variableOptionRequestIds = ref<Record<string, number>>({});
 const formulaKeyword = ref("");
 const formulaDialogVisible = ref(false);
 const formulaFormRef = ref<FormInstance>();
@@ -138,7 +163,7 @@ const precheckResult = ref<CostLiteRecord>({});
 const trialFeeId = ref<number | string>();
 const simulationMode = ref<"single" | "batch">("single");
 const integrationDialogVisible = ref(false);
-const integrationExampleTab = ref<"request" | "starter" | "runtime">("request");
+const integrationExampleTab = ref<"request" | "endpoint">("request");
 const integrationExampleScope = ref<"scene" | "fee">("scene");
 const integrationExampleMode = ref<"sync" | "batch">("sync");
 
@@ -154,6 +179,38 @@ const variableMetaMap = computed<Record<string, CostLiteRecord>>(() => {
     if (item.variableCode) result[String(item.variableCode)] = item;
   });
   return result;
+});
+const feeVariableOptions = computed<CostLiteRecord[]>(() => {
+  const seen = new Set<string>();
+  const result: CostLiteRecord[] = [];
+  feeVariableContracts.value
+    .slice()
+    .sort((left, right) => Number(left.sortNo || 0) - Number(right.sortNo || 0))
+    .forEach((relation) => {
+      const variableCode = String(relation.variableCode || "").trim();
+      const variableId = relation.variableId == null ? "" : String(relation.variableId);
+      const key = variableId || variableCode;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      const meta = variableMetaMap.value[variableCode] || {};
+      result.push({
+        ...meta,
+        ...relation,
+        variableId: relation.variableId ?? meta.variableId,
+        variableCode,
+        variableName: relation.variableName || meta.variableName || variableCode,
+        variableSourceType: relation.variableSourceType || meta.sourceType,
+        variableStatus: relation.variableStatus ?? meta.status,
+        sourceType: relation.sourceType || "MANUAL_REQUIRED",
+        relationType: relation.relationType || "OPTIONAL",
+      });
+    });
+  return result;
+});
+const feeQuantityVariableOptions = computed<CostLiteRecord[]>(() => {
+  const tierBasis = feeVariableOptions.value.filter((item) => String(item.relationType).toUpperCase() === "TIER_BASIS");
+  if (tierBasis.length) return tierBasis;
+  return feeVariableOptions.value.filter((item) => isNumericVariable(item));
 });
 const activeVersionId = computed(() => selectedScene.value?.activeVersionId);
 const activeVersion = computed(() =>
@@ -201,6 +258,11 @@ const formulaManagementSupported = computed(() => Boolean(
   && resolvedApi.value?.rollbackFormulaVersion
   && resolvedApi.value?.testFormula,
 ));
+const masterWritePermissions = computed(() => {
+  if (centerTab.value === "variables") return ["cost:lite:variable:write", "cost:lite:manage"];
+  if (centerTab.value === "formulas") return ["cost:lite:formula:write", "cost:lite:manage"];
+  return ["cost:lite:fee:write", "cost:lite:manage"];
+});
 
 const linkedVariableCodes = computed(() => {
   const codes = new Set<string>();
@@ -327,6 +389,25 @@ function errorMessage(error: unknown, fallback: string): string {
     return String((error as CostLiteRecord).msg || (error as CostLiteRecord).message);
   }
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function conditionOperatorOptions(variableCode: unknown): Array<{ label: string; value: string }> {
+  const code = String(variableCode || "").trim();
+  const meta = variableMetaMap.value[code];
+  if (!meta) return [];
+  const dictionary = new Map(dictOptions("cost_rule_operator").map((item) => [String(item.value).toUpperCase(), item.label]));
+  return operatorOptionsForVariable(meta).map((item) => ({
+    value: item.value,
+    label: dictionary.get(item.value) || item.label,
+  }));
+}
+
+function hasNonBlankValue(value: unknown): boolean {
+  return value !== undefined && value !== null && String(value).trim() !== "";
+}
+
+function isOptionalStrictFiniteDecimal(value: unknown): boolean {
+  return !hasNonBlankValue(value) || isStrictFiniteDecimal(value);
 }
 
 async function loadAllPages(
@@ -472,6 +553,10 @@ async function loadScenes(
 function clearSceneContext(): void {
   fees.value = [];
   variables.value = [];
+  feeVariableContracts.value = [];
+  variableOptionMap.value = {};
+  variableOptionLoading.value = {};
+  variableOptionRequestIds.value = {};
   variableGroups.value = [];
   rules.value = [];
   versions.value = [];
@@ -482,6 +567,7 @@ function clearSceneContext(): void {
   trialFeeId.value = undefined;
   integrationExampleScope.value = "scene";
   feeGovernance.value = {};
+  variableOptionPageMap.value = {};
 }
 
 async function loadSceneContext(
@@ -541,26 +627,34 @@ async function loadSceneContext(
   }
 }
 
-async function loadRules(): Promise<void> {
+async function loadRules(): Promise<boolean> {
   if (!selectedSceneId.value || !selectedFeeId.value) {
     rules.value = [];
     feeGovernance.value = {};
-    return;
+    return true;
   }
   const requestId = ++rulesRequestId;
   loading.rules = true;
   try {
-    const [ruleRows, governance] = await Promise.all([
+    const feeVariableRequest = api().listFeeVariables?.(selectedFeeId.value)
+      || Promise.resolve<CostLiteRecord[]>([]);
+    const [ruleRows, governance, contracts] = await Promise.all([
       loadAllPages((params) => api().listRules(selectedSceneId.value!, selectedFeeId.value!, params)),
       api().getFeeGovernance(selectedFeeId.value),
+      feeVariableRequest,
     ]);
-    if (requestId !== rulesRequestId) return;
+    if (requestId !== rulesRequestId) return false;
     rules.value = ruleRows;
     feeGovernance.value = governance;
+    feeVariableContracts.value = Array.isArray(contracts) && contracts.length
+      ? contracts
+      : (Array.isArray(governance?.variableContracts) ? governance.variableContracts : []);
+    return true;
   } catch (error) {
     if (requestId === rulesRequestId) {
       ElMessage.error(errorMessage(error, "费率规则加载失败"));
     }
+    return false;
   } finally {
     if (requestId === rulesRequestId) loading.rules = false;
   }
@@ -669,6 +763,53 @@ const feeRules: FormRules = {
   feeName: [{ required: true, message: "请输入费目名称", trigger: "blur" }],
 };
 
+const feeVariableDialogVisible = ref(false);
+const feeVariableDialogLoading = ref(false);
+const feeVariableDraft = ref<CostLiteRecord[]>([]);
+const feeVariableKeyword = ref("");
+const feeVariableAvailableSelection = ref<Array<number | string>>([]);
+const feeVariableConfiguredSelection = ref<Array<number | string>>([]);
+
+const feeVariableAvailable = computed<CostLiteRecord[]>(() => {
+  const selectedIds = new Set(
+    feeVariableDraft.value.map((item) => String(item.variableId)).filter(Boolean),
+  );
+  const keyword = feeVariableKeyword.value.trim().toLowerCase();
+  return variables.value.filter((item) => {
+    if (selectedIds.has(String(item.variableId))) return false;
+    if (!keyword) return true;
+    return [item.variableCode, item.variableName, item.groupName]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(keyword));
+  });
+});
+
+const feeVariableConfiguredRows = computed<CostLiteRecord[]>(() => feeVariableDraft.value);
+
+function mergeFeeVariableContracts(contracts: CostLiteRecord[]): CostLiteRecord[] {
+  const merged = new Map<string, CostLiteRecord>();
+  contracts
+    .slice()
+    .sort((left, right) => Number(left.sortNo || 0) - Number(right.sortNo || 0))
+    .forEach((item) => {
+      const variableId = item.variableId == null ? "" : String(item.variableId);
+      const variableCode = String(item.variableCode || "").trim();
+      const key = variableId || variableCode;
+      if (!key) return;
+      const existing = merged.get(key);
+      // 同一要素可能同时存在手工关系和规则派生关系。维护窗口只显示一行，
+      // 优先保留手工关系，保存时仍由后端单独保留 RULE_DERIVED 记录。
+      if (!existing || String(existing.sourceType || "") === "RULE_DERIVED") {
+        merged.set(key, { ...item });
+      }
+    });
+  return Array.from(merged.values());
+}
+
+function isNumericVariable(variable: CostLiteRecord): boolean {
+  return NUMERIC_DATA_TYPES.has(String(variable?.dataType || variable?.variableType || "").toUpperCase());
+}
+
 async function openFeeDialog(fee?: CostLiteRecord): Promise<void> {
   if (!selectedSceneId.value) return;
   resetObject(feeForm, {
@@ -731,6 +872,146 @@ async function deleteFee(fee: CostLiteRecord): Promise<void> {
   }
 }
 
+function optionSourceText(sourceType: unknown, dictType?: unknown): string {
+  const normalized = String(sourceType || (dictType ? "PLATFORM_DICT" : "NONE")).toUpperCase();
+  const labels: Record<string, string> = {
+    NONE: "手工/上下文",
+    PLATFORM_DICT: "轻量平台字典",
+    BUSINESS_DICT: "业务系统字典",
+    BUSINESS_MASTER: "业务主数据",
+  };
+  return labels[normalized] || normalized;
+}
+
+function onAvailableFeeVariableSelection(rows: CostLiteRecord[]): void {
+  feeVariableAvailableSelection.value = rows.map((item) => item.variableId);
+}
+
+function onConfiguredFeeVariableSelection(rows: CostLiteRecord[]): void {
+  feeVariableConfiguredSelection.value = rows
+    .filter((item) => String(item.sourceType || "") !== "RULE_DERIVED")
+    .map((item) => item.variableId);
+}
+
+function addFeeVariables(): void {
+  const selectedIds = new Set(feeVariableAvailableSelection.value.map(String));
+  const candidates = feeVariableAvailable.value.filter((item) => selectedIds.has(String(item.variableId)));
+  if (!candidates.length) return;
+  const nextSort = feeVariableDraft.value.reduce((max, item) => Math.max(max, Number(item.sortNo || 0)), 0);
+  candidates.forEach((item, index) => {
+    feeVariableDraft.value.push({
+      variableId: item.variableId,
+      variableCode: item.variableCode,
+      variableName: item.variableName,
+      variableType: item.variableType,
+      variableSourceType: item.sourceType,
+      dataType: item.dataType,
+      variableStatus: item.status,
+      relationType: "OPTIONAL",
+      sourceType: "MANUAL_REQUIRED",
+      sourceCode: "FEE_ELEMENT_CONFIG",
+      sortNo: nextSort + (index + 1) * 10,
+      remark: "",
+    });
+  });
+  feeVariableAvailableSelection.value = [];
+}
+
+function removeFeeVariables(): void {
+  const selectedIds = new Set(feeVariableConfiguredSelection.value.map(String));
+  const derived = feeVariableDraft.value.filter((item) =>
+    selectedIds.has(String(item.variableId)) && String(item.sourceType || "") === "RULE_DERIVED",
+  );
+  if (derived.length) {
+    ElMessage.warning("规则自动引用的要素不能在这里移除，请先修改或删除对应规则");
+  }
+  feeVariableDraft.value = feeVariableDraft.value.filter((item) =>
+    !selectedIds.has(String(item.variableId)) || String(item.sourceType || "") === "RULE_DERIVED",
+  );
+  feeVariableConfiguredSelection.value = [];
+}
+
+function moveFeeVariable(index: number, offset: number): void {
+  const targetIndex = index + offset;
+  if (targetIndex < 0 || targetIndex >= feeVariableDraft.value.length) return;
+  const current = feeVariableDraft.value[index];
+  feeVariableDraft.value[index] = feeVariableDraft.value[targetIndex];
+  feeVariableDraft.value[targetIndex] = current;
+  feeVariableDraft.value.forEach((item, itemIndex) => {
+    if (String(item.sourceType || "") !== "RULE_DERIVED") item.sortNo = (itemIndex + 1) * 10;
+  });
+}
+
+async function openFeeVariableDialog(fee: CostLiteRecord = selectedFee.value || {}): Promise<void> {
+  if (!fee.feeId || !selectedSceneId.value) return;
+  if (!api().listFeeVariables || !api().replaceFeeVariables) {
+    ElMessage.error("当前 CostLiteApi 未提供费目要素配置接口，请更新前端适配器");
+    return;
+  }
+  feeVariableDialogLoading.value = true;
+  feeVariableKeyword.value = "";
+  feeVariableAvailableSelection.value = [];
+  feeVariableConfiguredSelection.value = [];
+  try {
+    const contracts = await api().listFeeVariables!(fee.feeId);
+    feeVariableDraft.value = mergeFeeVariableContracts(Array.isArray(contracts) ? contracts : [])
+      .map((item: CostLiteRecord, index: number) => ({
+        ...item,
+        sortNo: Number(item.sortNo ?? (index + 1) * 10),
+        relationType: item.relationType || "OPTIONAL",
+      }));
+    feeVariableDialogVisible.value = true;
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "费目要素加载失败"));
+  } finally {
+    feeVariableDialogLoading.value = false;
+  }
+}
+
+async function saveFeeVariables(): Promise<void> {
+  if (!selectedFeeId.value || !api().replaceFeeVariables) return;
+  const usedCodes = new Set<string>();
+  rules.value.forEach((rule) => {
+    if (rule.quantityVariableCode) usedCodes.add(String(rule.quantityVariableCode));
+    (Array.isArray(rule.conditions) ? rule.conditions : []).forEach((condition: CostLiteRecord) => {
+      if (condition.variableCode) usedCodes.add(String(condition.variableCode));
+    });
+  });
+  const removedUsed = feeVariableContracts.value
+    .filter((item) => String(item.sourceType || "") !== "RULE_DERIVED")
+    .filter((item) => !feeVariableDraft.value.some((draft) =>
+      String(draft.variableId) === String(item.variableId)))
+    .map((item) => item.variableCode)
+    .filter((code) => code && usedCodes.has(String(code)));
+  if (removedUsed.length) {
+    const confirmed = await confirmAction(
+      `以下要素仍被现有规则引用：${removedUsed.join("、")}。保存后规则自动关系会保留，建议先调整规则。是否继续？`,
+      "规则仍在引用要素",
+      { confirmButtonText: "继续保存", cancelButtonText: "取消" },
+    );
+    if (!confirmed) return;
+  }
+  feeVariableDialogLoading.value = true;
+  try {
+    const payload = feeVariableDraft.value
+      .filter((item) => String(item.sourceType || "") !== "RULE_DERIVED")
+      .map((item, index) => ({
+        variableId: item.variableId,
+        relationType: item.relationType || "OPTIONAL",
+        sortNo: Number(item.sortNo ?? (index + 1) * 10),
+        remark: item.remark || "",
+      }));
+    await api().replaceFeeVariables!(selectedFeeId.value, payload);
+    ElMessage.success("费目要素配置已保存");
+    feeVariableDialogVisible.value = false;
+    await loadRules();
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "费目要素保存失败"));
+  } finally {
+    feeVariableDialogLoading.value = false;
+  }
+}
+
 async function disableFee(fee: CostLiteRecord): Promise<void> {
   const confirmed = await confirmAction(
     `确认停用费目“${fee.feeName || fee.feeCode}”？停用后将不再参与新的计费。`,
@@ -770,6 +1051,9 @@ async function openVariableDialog(variable?: CostLiteRecord): Promise<void> {
     sourceType: variable?.sourceType || "INPUT",
     sourceSystem: variable?.sourceSystem || "",
     dictType: variable?.dictType || "",
+    optionSourceType: variable?.optionSourceType || (variable?.dictType ? "PLATFORM_DICT" : "NONE"),
+    optionSourceCode: variable?.optionSourceCode || variable?.dictType || "",
+    optionConfigJson: variable?.optionConfigJson || "",
     dataPath: variable?.dataPath || "",
     remoteApi: variable?.remoteApi || "",
     requestMethod: variable?.requestMethod || "GET",
@@ -806,6 +1090,24 @@ async function openVariableDialog(variable?: CostLiteRecord): Promise<void> {
     ElMessage.error(errorMessage(error, "要素详情加载失败"));
   } finally {
     loading.detail = false;
+  }
+}
+
+function handleOptionSourceTypeChange(optionSourceType: string): void {
+  const normalized = String(optionSourceType || "NONE").toUpperCase();
+  if (normalized === "PLATFORM_DICT") {
+    variableForm.sourceType = "DICT";
+    variableForm.variableType = "DICT";
+    variableForm.optionSourceCode = variableForm.optionSourceCode || variableForm.dictType || "";
+    return;
+  }
+  if (["BUSINESS_DICT", "BUSINESS_MASTER"].includes(normalized)
+    && String(variableForm.sourceType || "").toUpperCase() === "DICT") {
+    variableForm.sourceType = "INPUT";
+    if (variableForm.variableType === "DICT") variableForm.variableType = "TEXT";
+  }
+  if (["BUSINESS_DICT", "BUSINESS_MASTER"].includes(normalized)) {
+    variableForm.dictType = "";
   }
 }
 
@@ -900,6 +1202,53 @@ const ruleDialogVisible = ref(false);
 const ruleFormRef = ref<FormInstance>();
 const ruleForm = reactive<CostLiteRecord>({});
 const rulePreviewInputJson = ref("{}");
+const matrixDialogVisible = ref(false);
+const matrixRows = ref<CostLiteRecord[]>([]);
+const matrixSourceRules = ref<CostLiteRecord[]>([]);
+const matrixSaving = ref(false);
+const matrixOptionState = computed<Record<string, CostLiteRecord>>(() => {
+  const state: Record<string, CostLiteRecord> = {};
+  feeVariableOptions.value.forEach((variable) => {
+    const code = String(variable.variableCode || "").trim();
+    if (!code) return;
+    const source = String(variable.optionSourceType || variable.sourceType || "").toUpperCase();
+    const isLegacyPlatformDict = source === "DICT"
+      || (!source && String(variable.variableType || "").toUpperCase() === "DICT");
+    if (source === "PLATFORM_DICT" || isLegacyPlatformDict) {
+      const rawOptions = dictionaryOptions.value[String(variable.dictType || "")];
+      const options = Array.isArray(rawOptions) ? rawOptions : [];
+      state[code] = {
+        options,
+        total: options.length,
+        hasMore: false,
+        hasPageMetadata: true,
+        // An absent or empty snapshot is not authoritative enough to expose
+        // a platform dictionary column or to accept stale codes.
+        hasOptionSnapshot: Array.isArray(rawOptions) && rawOptions.length > 0,
+      };
+      return;
+    }
+    if (source === "BUSINESS_DICT") {
+      const options = variableOptionMap.value[code] || [];
+      const page = variableOptionPageMap.value[code];
+      state[code] = {
+        options,
+        total: page?.total ?? 0,
+        hasMore: page ? Boolean(page.hasMore) || page.total > options.length || !page.hasPageMetadata : true,
+        hasPageMetadata: Boolean(page?.hasPageMetadata),
+        hasOptionSnapshot: Boolean(page?.hasOptionSnapshot),
+      };
+    }
+  });
+  return state;
+});
+const matrixColumns = computed(() => matrixColumnsFromVariables(feeVariableOptions.value, matrixOptionState.value));
+const matrixAdvancedRules = computed(() => matrixSourceRules.value.filter(
+  (rule) => !isMatrixCompatibleRule(rule, matrixColumns.value),
+));
+const matrixExcludedVariableCount = computed(() => Math.max(0,
+  feeVariableOptions.value.length - matrixColumns.value.length,
+));
 const ruleRules: FormRules = {
   ruleCode: [{ required: true, message: "请输入规则编码", trigger: "blur" }],
   ruleName: [{ required: true, message: "请输入规则名称", trigger: "blur" }],
@@ -1046,7 +1395,7 @@ function buildRulePreviewInput(source: CostLiteRecord): string {
     const rawValue = values[0] || "";
     const variable = variables.value.find((item) => String(item.variableCode) === variableCode);
     const dataType = String(variable?.dataType || variable?.variableType || "").toUpperCase();
-    if (["NUMBER", "DECIMAL", "INTEGER", "LONG", "DOUBLE", "BIGDECIMAL"].includes(dataType)) {
+    if (NUMERIC_DATA_TYPES.has(dataType)) {
       const numberValue = Number(rawValue);
       input[variableCode] = Number.isFinite(numberValue) ? numberValue : 1;
     } else if (["BOOLEAN", "BOOL"].includes(dataType)) {
@@ -1084,22 +1433,114 @@ function variableName(code: unknown): string {
   return variables.value.find((item) => item.variableCode === code)?.variableName || String(code || "");
 }
 
-async function handleConditionVariableChange(condition: CostLiteRecord, variableCode: string): Promise<void> {
-  const meta = variableMetaMap.value[String(variableCode || "")];
-  condition.displayName = condition.displayName || meta?.variableName || variableCode;
-  condition.compareValue = "";
-  const dictType = String(meta?.dictType || "").trim();
-  if (!dictType || dictionaryOptions.value[dictType]) return;
+async function loadVariableOptions(meta: CostLiteRecord | undefined, keyword = "", force = false): Promise<void> {
+  if (!meta?.variableId) return;
+  const variableCode = String(meta.variableCode || "");
+  const optionSourceType = String(
+    meta.optionSourceType
+      || meta.optionSource
+      || meta.sourceType
+      || (String(meta.variableType || "").toUpperCase() === "DICT" ? "PLATFORM_DICT" : ""),
+  ).toUpperCase();
+  if (!optionSourceType || optionSourceType === "NONE") return;
+  if (optionSourceType === "PLATFORM_DICT") {
+    const dictType = String(meta.dictType || "").trim();
+    if (dictType && !dictionaryOptions.value[dictType]) {
+      const dynamicDictionaries = await api().listDictionaries([dictType]);
+      dictionaryOptions.value = { ...dictionaryOptions.value, ...dynamicDictionaries };
+    }
+    return;
+  }
+  if (!api().listVariableOptions) return;
+  if (!force && !keyword && variableOptionMap.value[variableCode]) return;
+  const requestId = (variableOptionRequestIds.value[variableCode] || 0) + 1;
+  variableOptionRequestIds.value = {
+    ...variableOptionRequestIds.value,
+    [variableCode]: requestId,
+  };
+  if (!keyword && force) {
+    variableOptionPageMap.value = {
+      ...variableOptionPageMap.value,
+      [variableCode]: {
+        total: 0,
+        hasMore: true,
+        hasPageMetadata: false,
+        hasOptionSnapshot: false,
+      },
+    };
+  }
+  variableOptionLoading.value = { ...variableOptionLoading.value, [variableCode]: true };
   try {
-    const dynamicDictionaries = await api().listDictionaries([dictType]);
-    dictionaryOptions.value = { ...dictionaryOptions.value, ...dynamicDictionaries };
+    const page = await api().listVariableOptions!(meta.variableId, {
+      keyword,
+      pageNum: 1,
+      // 101 is intentional: 100 is the matrix safety cap, and the extra
+      // record lets the UI prove that the source is already high-cardinality.
+      pageSize: 101,
+    });
+    if (variableOptionRequestIds.value[variableCode] !== requestId) return;
+    const rows = Array.isArray(page?.rows) ? page.rows : [];
+    const total = Number(page?.total ?? rows.length);
+    variableOptionMap.value = {
+      ...variableOptionMap.value,
+      [variableCode]: rows,
+    };
+    if (!keyword) {
+      variableOptionPageMap.value = {
+        ...variableOptionPageMap.value,
+        [variableCode]: {
+          total: Number.isFinite(total) ? total : rows.length,
+          hasMore: Boolean(page?.hasMore)
+            || page?.hasPageMetadata !== true
+            || (Number.isFinite(total) && total > rows.length),
+          hasPageMetadata: page?.hasPageMetadata === true,
+          hasOptionSnapshot: page?.hasPageMetadata === true && rows.length > 0,
+        },
+      };
+    }
   } catch (error) {
-    ElMessage.warning(errorMessage(error, `字典 ${dictType} 加载失败，当前按编码输入`));
+    if (variableOptionRequestIds.value[variableCode] === requestId) {
+      ElMessage.warning(errorMessage(error, `${meta.variableName || variableCode}选项加载失败`));
+    }
+  } finally {
+    if (variableOptionRequestIds.value[variableCode] === requestId) {
+      variableOptionLoading.value = { ...variableOptionLoading.value, [variableCode]: false };
+    }
   }
 }
 
+async function handleConditionVariableChange(condition: CostLiteRecord, variableCode: string): Promise<void> {
+  const meta = variableMetaMap.value[String(variableCode || "")];
+  condition.displayName = meta?.variableName || variableCode;
+  const allowedOperators = conditionOperatorOptions(variableCode);
+  if (!allowedOperators.some((item) => item.value === String(condition.operatorCode || "").toUpperCase())) {
+    condition.operatorCode = allowedOperators[0]?.value || "EQ";
+  }
+  condition.compareValue = "";
+  const dictType = String(meta?.dictType || "").trim();
+  if (dictType && !dictionaryOptions.value[dictType]) {
+    try {
+      const dynamicDictionaries = await api().listDictionaries([dictType]);
+      dictionaryOptions.value = { ...dictionaryOptions.value, ...dynamicDictionaries };
+    } catch (error) {
+      ElMessage.warning(errorMessage(error, `字典 ${dictType} 加载失败，当前按编码输入`));
+    }
+  }
+  await loadVariableOptions(meta);
+}
+
+async function handleConditionOptionSearch(meta: CostLiteRecord | undefined, keyword: string): Promise<void> {
+  await loadVariableOptions(meta, keyword, true);
+}
+
 function handleConditionOperatorChange(condition: CostLiteRecord, operatorCode: string): void {
+  const meta = variableMetaMap.value[String(condition.variableCode || "")];
   const normalizedOperator = String(operatorCode || "").toUpperCase();
+  const allowedOperators = conditionOperatorOptions(condition.variableCode);
+  if (meta && !allowedOperators.some((item) => item.value === normalizedOperator)) {
+    condition.operatorCode = allowedOperators[0]?.value || "EQ";
+    return;
+  }
   if (!["IN", "NOT_IN"].includes(normalizedOperator)
     && typeof condition.compareValue === "string"
     && condition.compareValue.includes(",")) {
@@ -1308,24 +1749,37 @@ function validateRuleEditor(payload: CostLiteRecord): boolean {
   }
   for (const [index, condition] of conditions.entries()) {
     const operator = String(condition.operatorCode || "").toUpperCase();
+    const variableMeta = variableMetaMap.value[String(condition.variableCode || "")] || {};
+    const dataType = String(variableMeta.dataType || variableMeta.variableType || "").toUpperCase();
     if (!operator) {
       ElMessage.warning(`第 ${index + 1} 条条件请选择操作符`);
       return false;
     }
-    if (!["IS_NULL", "IS_NOT_NULL"].includes(operator) && !String(condition.compareValue || "").trim()) {
+    if (!["IS_NULL", "IS_NOT_NULL"].includes(operator) && !hasNonBlankValue(condition.compareValue)) {
       ElMessage.warning(`第 ${index + 1} 条条件请填写比较值`);
       return false;
     }
-    if (["BETWEEN"].includes(operator) && String(condition.compareValue).split(",").filter(Boolean).length < 2) {
+    if (["BETWEEN"].includes(operator)
+      && String(condition.compareValue).split(",").map((value) => value.trim()).filter(Boolean).length < 2) {
       ElMessage.warning(`第 ${index + 1} 条区间条件请按“起始值,截止值”填写`);
       return false;
     }
+    if (["IN", "NOT_IN", "BETWEEN"].includes(operator)
+      && NUMERIC_DATA_TYPES.has(dataType)
+      && String(condition.compareValue).split(",").map((value) => value.trim()).some((value) => !isStrictFiniteDecimal(value))) {
+      ElMessage.warning(`第 ${index + 1} 条数值条件只能填写有限十进制数值`);
+      return false;
+    }
   }
-  if (payload.ruleType === "FIXED_RATE" && payload.pricingMode !== "GROUPED" && payload.pricingConfig?.rateValue == null) {
+  if (payload.ruleType === "FIXED_RATE"
+    && payload.pricingMode !== "GROUPED"
+    && !isStrictFiniteDecimal(payload.pricingConfig?.rateValue)) {
     ElMessage.warning("固定费率规则必须填写费率");
     return false;
   }
-  if (payload.ruleType === "FIXED_AMOUNT" && payload.pricingMode !== "GROUPED" && payload.pricingConfig?.amountValue == null) {
+  if (payload.ruleType === "FIXED_AMOUNT"
+    && payload.pricingMode !== "GROUPED"
+    && !isStrictFiniteDecimal(payload.pricingConfig?.amountValue)) {
     ElMessage.warning("固定金额规则必须填写金额");
     return false;
   }
@@ -1337,7 +1791,7 @@ function validateRuleEditor(payload: CostLiteRecord): boolean {
     const valueKey = payload.ruleType === "FIXED_RATE" ? "rateValue" : "amountValue";
     const priceMap = new Map((payload.pricingConfig?.groupPrices || []).map((item: CostLiteRecord) => [Number(item.groupNo), item]));
     for (const group of conditionGroups.value) {
-      if (priceMap.get(group.groupNo)?.[valueKey] == null) {
+      if (!isStrictFiniteDecimal(priceMap.get(group.groupNo)?.[valueKey])) {
         ElMessage.warning(`组合组 ${group.groupNo} 未填写${valueKey === "rateValue" ? "费率" : "固定金额"}`);
         return false;
       }
@@ -1349,16 +1803,24 @@ function validateRuleEditor(payload: CostLiteRecord): boolean {
       return false;
     }
     for (const [index, tier] of payload.tiers.entries()) {
-      if (tier.rateValue == null) {
+      if (!isStrictFiniteDecimal(tier.rateValue)) {
         ElMessage.warning(`第 ${index + 1} 档阶梯请填写费率`);
         return false;
       }
-      if (tier.startValue != null && tier.endValue != null && Number(tier.startValue) >= Number(tier.endValue)) {
+      if (!isOptionalStrictFiniteDecimal(tier.startValue) || !isOptionalStrictFiniteDecimal(tier.endValue)) {
+        ElMessage.warning(`第 ${index + 1} 档阶梯起止值必须是有效数字或留空表示开区间`);
+        return false;
+      }
+      if (hasNonBlankValue(tier.startValue)
+        && hasNonBlankValue(tier.endValue)
+        && Number(tier.startValue) >= Number(tier.endValue)) {
         ElMessage.warning(`第 ${index + 1} 档阶梯起始值必须小于截止值`);
         return false;
       }
       const previous = payload.tiers[index - 1];
-      if (previous?.endValue != null && tier.startValue != null && Number(previous.endValue) !== Number(tier.startValue)) {
+      if (hasNonBlankValue(previous?.endValue)
+        && hasNonBlankValue(tier.startValue)
+        && Number(previous.endValue) !== Number(tier.startValue)) {
         ElMessage.warning(`第 ${index + 1} 档阶梯与上一档不连续，请检查区间`);
         return false;
       }
@@ -1369,6 +1831,225 @@ function validateRuleEditor(payload: CostLiteRecord): boolean {
     return false;
   }
   return true;
+}
+
+async function loadMatrixRuleSources(): Promise<CostLiteRecord[]> {
+  const sourceRows = await Promise.all(rules.value.map(async (rule) => {
+    if (!rule.ruleId) return rule;
+    try {
+      const detail = await api().getRule(rule.ruleId);
+      return Object.keys(detail || {}).length
+        ? detail
+        : { ...rule, matrixDetailUnavailable: true };
+    } catch {
+      // The list endpoint is still a useful fallback for an existing rule;
+      // the advanced editor remains available if its detail cannot be read.
+      return { ...rule, matrixDetailUnavailable: true };
+    }
+  }));
+  return sourceRows.map((rule) => ({
+    ...rule,
+    sceneId: rule.sceneId ?? selectedSceneId.value,
+    feeId: rule.feeId ?? selectedFeeId.value,
+  }));
+}
+
+async function rebuildMatrixRows(): Promise<void> {
+  const sourceRows = await loadMatrixRuleSources();
+  matrixSourceRules.value = sourceRows;
+  matrixRows.value = sourceRows
+    .map((rule) => ruleToMatrixRow(rule, matrixColumns.value))
+    .filter((row): row is CostLiteRecord => Boolean(row));
+}
+
+async function openRateMatrix(): Promise<void> {
+  if (!selectedSceneId.value || !selectedFeeId.value) return;
+  loading.matrix = true;
+  try {
+    // Load the complete first page for every business dictionary before the
+    // columns are calculated. A total greater than the returned rows keeps
+    // the dimension in the advanced editor instead of offering unsafe input.
+    await Promise.all(feeVariableOptions.value.map(async (variable) => {
+      const source = String(variable.optionSourceType || variable.sourceType || "").toUpperCase();
+      const isLegacyPlatformDict = source === "DICT"
+        || (!source && String(variable.variableType || "").toUpperCase() === "DICT");
+      if (source === "PLATFORM_DICT" || source === "BUSINESS_DICT" || isLegacyPlatformDict) {
+        await loadVariableOptions(variable, "", true);
+      }
+    }));
+    await rebuildMatrixRows();
+    matrixDialogVisible.value = true;
+    if (!matrixColumns.value.length && !matrixRows.value.length) {
+      ElMessage.info(`当前费目没有满足矩阵安全边界的要素；超过 ${MATRIX_OPTION_LIMIT} 项的字典、日期时间和复杂规则请使用高级规则。`);
+    }
+  } catch (error) {
+    ElMessage.error(errorMessage(error, "动态费率矩阵加载失败"));
+  } finally {
+    loading.matrix = false;
+  }
+}
+
+function addMatrixRow(): void {
+  if (!matrixColumns.value.length) {
+    ElMessage.warning("当前没有可用于矩阵的低基数要素，请使用高级规则编辑器。");
+    return;
+  }
+  const quantity = feeQuantityVariableOptions.value[0]?.variableCode || "";
+  matrixRows.value.push(createEmptyMatrixRow(matrixColumns.value, {
+    sceneId: selectedSceneId.value,
+    feeId: selectedFeeId.value,
+    ruleType: "FIXED_RATE",
+    quantityVariableCode: quantity,
+    pricingMode: "TYPED",
+    status: "0",
+  }));
+}
+
+function copyMatrixRow(row: CostLiteRecord): void {
+  const suffix = "-COPY";
+  const originalCode = String(row.ruleCode || "RULE");
+  const existingCodes = new Set(matrixRows.value.map((item) => String(item.ruleCode || "")));
+  let copiedCode = `${originalCode}${suffix}`;
+  let index = 2;
+  while (existingCodes.has(copiedCode)) copiedCode = `${originalCode}${suffix}${index++}`;
+  matrixRows.value.push(createEmptyMatrixRow(matrixColumns.value, {
+    ...row,
+    ruleId: undefined,
+    sourceRule: undefined,
+    ruleCode: copiedCode,
+    ruleName: `${row.ruleName || originalCode}（复制）`,
+  }));
+}
+
+function validateMatrixPayload(payload: CostLiteRecord, rowIndex: number): boolean {
+  if (!String(payload.ruleCode || "").trim() || !String(payload.ruleName || "").trim()) {
+    ElMessage.warning(`第 ${rowIndex + 1} 行请填写规则编码和规则名称`);
+    return false;
+  }
+  if (!isStrictFiniteDecimal(payload.priority)) {
+    ElMessage.warning(`第 ${rowIndex + 1} 行优先级必须是数字`);
+    return false;
+  }
+  if (payload.ruleType === "FIXED_RATE") {
+    if (!payload.quantityVariableCode) {
+      ElMessage.warning(`第 ${rowIndex + 1} 行请选择计量要素`);
+      return false;
+    }
+    if (!isStrictFiniteDecimal(payload.pricingConfig?.rateValue)) {
+      ElMessage.warning(`第 ${rowIndex + 1} 行请填写固定费率`);
+      return false;
+    }
+  }
+  if (payload.ruleType === "FIXED_AMOUNT"
+    && !isStrictFiniteDecimal(payload.pricingConfig?.amountValue)) {
+    ElMessage.warning(`第 ${rowIndex + 1} 行请填写固定金额`);
+    return false;
+  }
+  return true;
+}
+
+async function refreshMatrixAfterFailure(): Promise<boolean> {
+  const rulesLoaded = await loadRules();
+  if (!rulesLoaded) return false;
+  if (matrixDialogVisible.value) {
+    try {
+      await rebuildMatrixRows();
+    } catch (error) {
+      ElMessage.warning(errorMessage(error, "矩阵视图刷新失败"));
+      return false;
+    }
+  }
+  return true;
+}
+
+async function saveRateMatrix(): Promise<void> {
+  if (!matrixRows.value.length) {
+    ElMessage.warning("请至少新增一条矩阵规则");
+    return;
+  }
+  const matrixValidation = validateMatrixRows(matrixRows.value, matrixColumns.value);
+  if (matrixValidation.errors.length) {
+    ElMessage.error(matrixValidation.errors.slice(0, 3).map((item) => item.message).join("\n"));
+    return;
+  }
+  const payloads = matrixRows.value.map((row) => matrixRowToRulePayload(row, matrixColumns.value, {
+    sceneId: selectedSceneId.value,
+    feeId: selectedFeeId.value,
+  }));
+  for (const [index, payload] of payloads.entries()) {
+    if (!validateMatrixPayload(payload, index)) return;
+  }
+  matrixSaving.value = true;
+  try {
+    const backendWarnings: CostLiteRecord[] = [];
+    for (const payload of payloads) {
+      const warnings = await api().previewRuleConflict(payload);
+      if (Array.isArray(warnings)) backendWarnings.push(...warnings);
+    }
+    if (matrixValidation.warnings.length || backendWarnings.length) {
+      const messages = [
+        ...matrixValidation.warnings,
+        ...backendWarnings,
+      ].slice(0, 6).map((item) => item.message || item.summary || JSON.stringify(item));
+      const confirmed = await confirmAction(
+        messages.join("\n"),
+        "发现矩阵规则冲突",
+        { confirmButtonText: "确认保存", cancelButtonText: "取消保存" },
+      );
+      if (!confirmed) return;
+    }
+    // The API exposes row-level CRUD rather than a transaction. Stop at the
+    // first failed row and reload rules/governance/contracts so the grid never
+    // pretends that the batch was atomic.
+    for (const payload of payloads) {
+      if (payload.ruleId) await api().updateRule(payload);
+      else await api().createRule(payload);
+    }
+    ElMessage.success("动态费率矩阵已保存");
+    matrixDialogVisible.value = false;
+    await loadRules();
+  } catch (error) {
+    const refreshed = await refreshMatrixAfterFailure();
+    ElMessage.error(`${errorMessage(error, "动态费率矩阵保存失败")}；${refreshed ? "当前规则状态已刷新" : "当前规则状态刷新失败，请手动刷新"}`);
+  } finally {
+    matrixSaving.value = false;
+  }
+}
+
+async function deleteMatrixRow(row: CostLiteRecord): Promise<void> {
+  if (!row.ruleId) {
+    const index = matrixRows.value.indexOf(row);
+    if (index >= 0) matrixRows.value.splice(index, 1);
+    return;
+  }
+  const source = row.sourceRule || row;
+  const confirmed = await confirmGovernedDelete(
+    `规则“${source.ruleName || source.ruleCode}”`,
+    api().getRuleGovernance ? () => api().getRuleGovernance!(source.ruleId) : undefined,
+  );
+  if (!confirmed) return;
+  try {
+    await api().deleteRules([source.ruleId]);
+    await loadRules();
+    await rebuildMatrixRows();
+    ElMessage.success("规则已删除");
+  } catch (error) {
+    const refreshed = await refreshMatrixAfterFailure();
+    ElMessage.error(`${errorMessage(error, "规则删除失败")}；${refreshed ? "当前规则状态已刷新" : "当前规则状态刷新失败，请手动刷新"}`);
+  }
+}
+
+async function openMatrixAdvanced(row: CostLiteRecord): Promise<void> {
+  const source = row.sourceRule || row;
+  if (source.matrixDetailUnavailable === true) {
+    ElMessage.warning("该规则详情暂时不可用，已保留在高级规则区；请刷新后重试。");
+    return;
+  }
+  // Open the detail first. If the request fails, keep the matrix visible so
+  // the user does not lose context or mistake an unavailable rule for a
+  // successfully opened editor.
+  await openRuleDialog(source);
+  if (ruleDialogVisible.value) matrixDialogVisible.value = false;
 }
 
 async function saveRule(): Promise<void> {
@@ -1854,20 +2535,12 @@ const integrationExample = computed(() => {
   }
   const requestJson = JSON.stringify(payload, null, 2);
   const baseUrl = typeof window === "undefined" ? "http://127.0.0.1:8080" : window.location.origin;
-  const starterPath = isBatch ? "/cost/simulations/batch" : "/cost/calculate";
-  const runtimePath = isBatch ? "/cost/run/simulation/batch-execute" : "/cost/run/fee/calculate";
-  const starterEndpoint = `${baseUrl}${starterPath}`;
-  const runtimeEndpoint = `${baseUrl}${runtimePath}`;
+  const endpointPath = isBatch ? "/cost/run/simulation/batch-execute" : "/cost/run/fee/calculate";
+  const endpoint = `${baseUrl}${endpointPath}`;
   const shellBody = requestJson.replace(/'/g, "'\\''");
-  const starterCurl = [
-    `curl -X POST ${starterEndpoint}`,
+  const curl = [
+    `curl -X POST ${endpoint}`,
     '  -H "Content-Type: application/json"',
-    `  -d '${shellBody}'`,
-  ].join("\n");
-  const runtimeCurl = [
-    `curl -X POST ${runtimeEndpoint}`,
-    '  -H "Content-Type: application/json"',
-    '  -H "X-Cost-Lite-Token: $ADMIN_TOKEN"',
     `  -d '${shellBody}'`,
   ].join("\n");
   return {
@@ -1878,11 +2551,9 @@ const integrationExample = computed(() => {
     modeName: isBatch ? "批量试算" : "同步计费",
     feeName: exampleFee?.feeName || "场景全部费目",
     feeCode: exampleFee?.feeCode || "ALL_FEES",
-    starterPath,
-    runtimePath,
+    endpointPath,
     requestJson,
-    starterCurl,
-    runtimeCurl,
+    curl,
     params: [
       { name: "sceneId", required: "是", description: "场景主键，来自场景列表。" },
       { name: "versionId", required: "是", description: isBatch ? "受保护试算建议传要验证的配置版本；生产正式核算固定传生效版本。" : "生产调用传生效版本主键，禁止业务系统自行读取配置表。" },
@@ -2069,10 +2740,10 @@ onMounted(initialize);
           <el-button :icon="Link" :disabled="!selectedSceneId" @click="openIntegrationExample">
             接口示例
           </el-button>
-          <el-button :icon="DocumentChecked" :disabled="!selectedSceneId" @click="runPublishPrecheck">
+          <el-button :icon="DocumentChecked" :disabled="!selectedSceneId" v-hasPermi="['cost:lite:publish', 'cost:lite:manage']" @click="runPublishPrecheck">
             发布检查
           </el-button>
-          <el-button type="primary" :icon="Promotion" :disabled="!selectedSceneId" @click="openPublishDialog">
+          <el-button type="primary" :icon="Promotion" :disabled="!selectedSceneId" v-hasPermi="['cost:lite:publish', 'cost:lite:manage']" @click="openPublishDialog">
             发布版本
           </el-button>
         </div>
@@ -2117,6 +2788,7 @@ onMounted(initialize);
               link
               type="primary"
               size="small"
+              v-hasPermi="['cost:lite:publish', 'cost:lite:manage']"
               @click="activateVersion(version)"
             >
               生效
@@ -2126,6 +2798,7 @@ onMounted(initialize);
               link
               type="warning"
               size="small"
+              v-hasPermi="['cost:lite:publish', 'cost:lite:manage']"
               @click="rollbackVersion(version)"
             >
               回退
@@ -2144,7 +2817,7 @@ onMounted(initialize);
             <span>场景</span>
             <el-tag size="small" effect="plain">{{ scenes.length }}</el-tag>
           </div>
-          <el-button type="primary" :icon="Plus" circle title="新增场景" @click="openSceneDialog()" />
+          <el-button type="primary" :icon="Plus" circle title="新增场景" v-hasPermi="['cost:lite:scene:write', 'cost:lite:manage']" @click="openSceneDialog()" />
         </div>
         <div class="panel-filter">
           <el-input v-model="sceneKeyword" :prefix-icon="Search" clearable placeholder="搜索场景" />
@@ -2167,8 +2840,8 @@ onMounted(initialize);
             <span class="scene-row-side">
               <el-tag :type="statusTagType('cost_scene_status', scene.status)" size="small">{{ dictLabel('cost_scene_status', scene.status) }}</el-tag>
               <span class="row-actions" @click.stop>
-                <el-button link :icon="Edit" title="编辑" @click="openSceneDialog(scene)" />
-                <el-button link type="danger" :icon="Delete" title="删除" @click="deleteScene(scene)" />
+                <el-button link :icon="Edit" title="编辑" v-hasPermi="['cost:lite:scene:write', 'cost:lite:manage']" @click="openSceneDialog(scene)" />
+                <el-button link type="danger" :icon="Delete" title="删除" v-hasPermi="['cost:lite:scene:write', 'cost:lite:manage']" @click="deleteScene(scene)" />
               </span>
             </span>
           </div>
@@ -2196,6 +2869,7 @@ onMounted(initialize);
               circle
               title="要素分组"
               :disabled="!selectedSceneId"
+              v-hasPermi="['cost:lite:group:write', 'cost:lite:manage']"
               @click="groupDialogVisible = true"
             />
             <el-button
@@ -2204,6 +2878,7 @@ onMounted(initialize);
               circle
               title="检查远程要素"
               :disabled="!selectedSceneId"
+              v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']"
               @click="refreshRemoteVariables"
             />
             <el-button
@@ -2212,6 +2887,7 @@ onMounted(initialize);
               circle
               :title="centerTab === 'fees' ? '新增费目' : centerTab === 'variables' ? '新增要素' : '新增公式'"
               :disabled="!selectedSceneId"
+              v-hasPermi="masterWritePermissions"
               @click="centerTab === 'fees' ? openFeeDialog() : centerTab === 'variables' ? openVariableDialog() : openFormulaDialog()"
             />
           </div>
@@ -2237,9 +2913,10 @@ onMounted(initialize);
               <span class="row-summary">{{ fee.factorSummary || fee.scopeDescription || '暂无影响因素摘要' }}</span>
             </span>
             <span class="row-actions" @click.stop>
-              <el-button link :icon="Edit" title="编辑" @click="openFeeDialog(fee)" />
-              <el-button v-if="String(fee.status) === '0'" link type="warning" :icon="Warning" title="停用" @click="disableFee(fee)" />
-              <el-button link type="danger" :icon="Delete" title="删除" @click="deleteFee(fee)" />
+                <el-button link :icon="Setting" title="设置要素" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="openFeeVariableDialog(fee)" />
+                <el-button link :icon="Edit" title="编辑" v-hasPermi="['cost:lite:fee:write', 'cost:lite:manage']" @click="openFeeDialog(fee)" />
+                <el-button v-if="String(fee.status) === '0'" link type="warning" :icon="Warning" title="停用" v-hasPermi="['cost:lite:fee:write', 'cost:lite:manage']" @click="disableFee(fee)" />
+                <el-button link type="danger" :icon="Delete" title="删除" v-hasPermi="['cost:lite:fee:write', 'cost:lite:manage']" @click="deleteFee(fee)" />
             </span>
           </div>
           <el-empty v-if="!fees.length" description="当前场景暂无费目" :image-size="64" />
@@ -2273,8 +2950,8 @@ onMounted(initialize);
             </el-table-column>
             <el-table-column label="操作" width="90" fixed="right">
               <template #default="{ row }">
-                <el-button link :icon="Edit" title="编辑" @click="openVariableDialog(row)" />
-                <el-button link type="danger" :icon="Delete" title="删除" @click="deleteVariable(row)" />
+                <el-button link :icon="Edit" title="编辑" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="openVariableDialog(row)" />
+                <el-button link type="danger" :icon="Delete" title="删除" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="deleteVariable(row)" />
               </template>
             </el-table-column>
           </el-table>
@@ -2311,10 +2988,10 @@ onMounted(initialize);
               <p class="formula-expression">{{ formula.formulaExpr }}</p>
             </div>
             <div class="formula-row-actions" @click.stop>
-              <el-button link :icon="VideoPlay" title="试算公式" @click="openFormulaDialog(formula)" />
-              <el-button link :icon="Refresh" title="查看版本" @click="openFormulaVersions(formula)" />
-              <el-button link :icon="Edit" title="编辑公式" @click="openFormulaDialog(formula)" />
-              <el-button link type="danger" :icon="Delete" title="删除公式" @click="deleteFormula(formula)" />
+              <el-button link :icon="VideoPlay" title="试算公式" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" @click="openFormulaDialog(formula)" />
+              <el-button link :icon="Refresh" title="查看版本" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" @click="openFormulaVersions(formula)" />
+              <el-button link :icon="Edit" title="编辑公式" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" @click="openFormulaDialog(formula)" />
+              <el-button link type="danger" :icon="Delete" title="删除公式" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" @click="deleteFormula(formula)" />
             </div>
           </article>
           <el-empty v-if="!filteredFormulas.length" description="当前场景暂无公式，点击右上角加号新增" :image-size="64" />
@@ -2328,7 +3005,10 @@ onMounted(initialize);
             <span>规则与费率</span>
             <el-tag size="small" effect="plain">{{ rules.length }}</el-tag>
           </div>
-          <el-button type="primary" :icon="Plus" :disabled="!selectedFeeId" @click="openRuleDialog()">新增规则</el-button>
+          <div class="panel-header-actions">
+            <el-button :loading="loading.matrix" :disabled="!selectedFeeId" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="openRateMatrix">动态矩阵维护</el-button>
+            <el-button type="primary" :icon="Plus" :disabled="!selectedFeeId" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="openRuleDialog()">新增规则</el-button>
+          </div>
         </div>
         <div v-if="selectedFee" class="fee-context">
           <div>
@@ -2337,12 +3017,23 @@ onMounted(initialize);
           </div>
           <div class="linked-tags">
             <span>关联要素</span>
-            <el-tag v-for="code in linkedVariableCodes.slice(0, 6)" :key="code" size="small" effect="plain">
-              {{ variableName(code) }}
+            <el-tag v-for="item in feeVariableOptions.slice(0, 6)" :key="item.variableCode" size="small" effect="plain">
+              {{ item.variableName || item.variableCode }}
             </el-tag>
-            <small v-if="!linkedVariableCodes.length">未关联</small>
+            <small v-if="!feeVariableOptions.length">未设置要素</small>
+            <el-button link type="primary" :icon="Setting" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="openFeeVariableDialog(selectedFee)">设置要素</el-button>
           </div>
         </div>
+        <el-alert
+          v-if="feeVariableOptions.length && matrixExcludedVariableCount"
+          class="matrix-safety-note"
+          title="部分要素未进入动态矩阵"
+          type="info"
+          :closable="false"
+          show-icon
+        >
+          <template #default>日期/时间、阶梯计量、高基数字典和业务主数据保留在高级规则中；业务字典只有在选项总数不超过 {{ MATRIX_OPTION_LIMIT }} 且分页完整时才生成动态列。</template>
+        </el-alert>
         <div class="rule-list">
           <article v-for="rule in rules" :key="rule.ruleId" class="rule-row">
             <div class="rule-row-main">
@@ -2359,8 +3050,8 @@ onMounted(initialize);
               <p>{{ rule.conditionSummary || '无附加条件' }}</p>
             </div>
             <div class="rule-row-actions">
-              <el-button :icon="Edit" circle title="编辑规则" @click="openRuleDialog(rule)" />
-              <el-button type="danger" plain :icon="Delete" circle title="删除规则" @click="deleteRule(rule)" />
+              <el-button :icon="Edit" circle title="编辑规则" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="openRuleDialog(rule)" />
+              <el-button type="danger" plain :icon="Delete" circle title="删除规则" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="deleteRule(rule)" />
             </div>
           </article>
           <el-empty v-if="!rules.length" :description="selectedFeeId ? '当前费目暂无规则' : '请先选择费目'" :image-size="64" />
@@ -2415,7 +3106,7 @@ onMounted(initialize);
                 当前试算：{{ trialScopeLabel() }}；{{ simulationMode === 'batch' ? '批量输入必须是对象数组，每条建议带唯一 bizNo；' : '' }}输入区请替换为业务系统真实请求数据。
               </div>
               <div class="simulation-actions">
-                <el-button type="primary" :icon="VideoPlay" :loading="loading.running" @click="runSimulation">
+                <el-button type="primary" :icon="VideoPlay" :loading="loading.running" v-hasPermi="['cost:lite:simulate', 'cost:lite:manage']" @click="runSimulation">
                   执行试算
                 </el-button>
               </div>
@@ -2512,7 +3203,7 @@ onMounted(initialize);
           <el-form-item label="说明" class="span-2"><el-input v-model="sceneForm.remark" type="textarea" :rows="3" /></el-form-item>
         </div>
       </el-form>
-      <template #footer><el-button @click="sceneDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" @click="saveScene">保存</el-button></template>
+      <template #footer><el-button @click="sceneDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" v-hasPermi="['cost:lite:scene:write', 'cost:lite:manage']" @click="saveScene">保存</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="feeDialogVisible" :title="feeForm.feeId ? '编辑费目' : '新增费目'" width="700px" destroy-on-close>
@@ -2538,7 +3229,112 @@ onMounted(initialize);
           <el-form-item label="备注" class="span-2"><el-input v-model="feeForm.remark" type="textarea" :rows="2" /></el-form-item>
         </div>
       </el-form>
-      <template #footer><el-button @click="feeDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" @click="saveFee">保存</el-button></template>
+      <template #footer><el-button @click="feeDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" v-hasPermi="['cost:lite:fee:write', 'cost:lite:manage']" @click="saveFee">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="feeVariableDialogVisible"
+      :title="selectedFee?.feeName ? '设置费目要素 · ' + selectedFee.feeName : '设置费目要素'"
+      width="1120px"
+      destroy-on-close
+    >
+      <el-alert
+        title="要素定义只描述业务含义和取值来源；这里决定当前费目允许使用哪些要素、显示顺序和使用角色。规则条件只能从已选要素中选择。"
+        type="info"
+        :closable="false"
+        show-icon
+      />
+      <div class="fee-variable-config" v-loading="feeVariableDialogLoading">
+        <section class="fee-variable-pane">
+          <div class="fee-variable-pane-header">
+            <strong>已选要素（{{ feeVariableConfiguredRows.length }}）</strong>
+            <span>规则自动引用项不可直接移除</span>
+          </div>
+          <el-table
+            :data="feeVariableConfiguredRows"
+            height="430"
+            border
+            size="small"
+            @selection-change="onConfiguredFeeVariableSelection"
+          >
+            <el-table-column type="selection" width="42" />
+            <el-table-column label="要素" min-width="185">
+              <template #default="{ row }">
+                <strong>{{ row.variableName || row.variableCode }}</strong>
+                <div class="cell-subtitle">{{ row.variableCode }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="类型/来源" min-width="125">
+              <template #default="{ row }">
+                <div>{{ variableDataTypeText(row.dataType || row.variableType) }}</div>
+                <div class="cell-subtitle">值：{{ variableSourceText(row.variableSourceType || row.sourceType) }}</div>
+                <div class="cell-subtitle">选项：{{ optionSourceText(row.optionSourceType, row.dictType) }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="使用角色" min-width="170">
+              <template #default="{ row }">
+                <el-select v-model="row.relationType" size="small" :disabled="row.sourceType === 'RULE_DERIVED'">
+                  <el-option label="条件要素（必选）" value="REQUIRED" />
+                  <el-option label="普通要素（可选）" value="OPTIONAL" />
+                  <el-option label="计量/阶梯依据" value="TIER_BASIS" />
+                  <el-option label="公式输入" value="FORMULA_INPUT" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="来源" width="118">
+              <template #default="{ row }">
+                <el-tag v-if="row.sourceType === 'RULE_DERIVED'" type="warning" size="small">规则自动引用</el-tag>
+                <el-tag v-else type="success" size="small">手工配置</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="顺序" width="92">
+              <template #default="{ $index }">
+                <el-button link :disabled="$index === 0" @click="moveFeeVariable($index, -1)">上移</el-button>
+                <el-button link :disabled="$index === feeVariableConfiguredRows.length - 1" @click="moveFeeVariable($index, 1)">下移</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <div class="fee-variable-transfer-actions">
+          <el-button type="primary" :disabled="!feeVariableAvailableSelection.length" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="addFeeVariables">← 添加</el-button>
+          <el-button type="danger" plain :disabled="!feeVariableConfiguredSelection.length" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="removeFeeVariables">移除 →</el-button>
+        </div>
+
+        <section class="fee-variable-pane">
+          <div class="fee-variable-pane-header">
+            <strong>可选要素（{{ feeVariableAvailable.length }}）</strong>
+            <el-input v-model="feeVariableKeyword" size="small" clearable placeholder="编码/名称/分组" style="width: 190px" />
+          </div>
+          <el-table
+            :data="feeVariableAvailable"
+            height="430"
+            border
+            size="small"
+            @selection-change="onAvailableFeeVariableSelection"
+          >
+            <el-table-column type="selection" width="42" />
+            <el-table-column label="要素" min-width="185">
+              <template #default="{ row }">
+                <strong>{{ row.variableName }}</strong>
+                <div class="cell-subtitle">{{ row.variableCode }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="groupName" label="分组" min-width="110" />
+            <el-table-column label="类型/来源" min-width="135">
+              <template #default="{ row }">
+                <div>{{ variableDataTypeText(row.dataType || row.variableType) }}</div>
+                <div class="cell-subtitle">值：{{ variableSourceText(row.sourceType) }}</div>
+                <div class="cell-subtitle">选项：{{ optionSourceText(row.optionSourceType, row.dictType) }}</div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+      </div>
+      <template #footer>
+        <el-button @click="feeVariableDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="feeVariableDialogLoading" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="saveFeeVariables">保存</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="variableDialogVisible" :title="variableForm.variableId ? '编辑要素' : '新增要素'" width="900px" destroy-on-close>
@@ -2566,6 +3362,17 @@ onMounted(initialize);
           </el-form-item>
           <el-form-item label="来源系统"><el-input v-model="variableForm.sourceSystem" /></el-form-item>
           <el-form-item label="取值路径"><el-input v-model="variableForm.dataPath" /></el-form-item>
+          <el-form-item label="选项来源">
+            <el-select v-model="variableForm.optionSourceType" @change="handleOptionSourceTypeChange">
+              <el-option v-for="item in dictOptions('cost_variable_option_source_type')" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="['BUSINESS_DICT', 'BUSINESS_MASTER'].includes(variableForm.optionSourceType)" label="选项目录编码">
+            <el-input v-model="variableForm.optionSourceCode" placeholder="由宿主业务系统适配器解释，如 cargo、port" />
+          </el-form-item>
+          <el-form-item v-if="['BUSINESS_DICT', 'BUSINESS_MASTER'].includes(variableForm.optionSourceType)" label="选项配置JSON" class="span-2">
+            <el-input v-model="variableForm.optionConfigJson" type="textarea" :rows="2" placeholder="可选；仅放适配器路由/字段配置，不放业务数据明细" />
+          </el-form-item>
           <template v-if="variableForm.sourceType === 'DICT' || variableForm.variableType === 'DICT'">
             <el-form-item label="字典类型"><el-input v-model="variableForm.dictType" placeholder="例如 cost_business_domain" /></el-form-item>
           </template>
@@ -2632,16 +3439,16 @@ onMounted(initialize);
           <el-form-item label="备注" class="span-2"><el-input v-model="variableForm.remark" type="textarea" :rows="2" /></el-form-item>
         </div>
       </el-form>
-      <template #footer><el-button @click="variableDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" @click="saveVariable">保存</el-button></template>
+      <template #footer><el-button @click="variableDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" v-hasPermi="['cost:lite:variable:write', 'cost:lite:manage']" @click="saveVariable">保存</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="groupDialogVisible" title="要素分组" width="680px">
-      <div class="dialog-toolbar"><el-button type="primary" :icon="Plus" @click="openGroupEditor()">新增分组</el-button></div>
+      <div class="dialog-toolbar"><el-button type="primary" :icon="Plus" v-hasPermi="['cost:lite:group:write', 'cost:lite:manage']" @click="openGroupEditor()">新增分组</el-button></div>
       <el-table :data="variableGroups" border size="small" max-height="420">
         <el-table-column prop="groupCode" label="分组编码" />
         <el-table-column prop="groupName" label="分组名称" />
         <el-table-column prop="variableCount" label="要素数" width="80" />
-        <el-table-column label="操作" width="100"><template #default="{ row }"><el-button link :icon="Edit" title="编辑分组" @click="openGroupEditor(row)" /><el-button link type="danger" :icon="Delete" title="删除分组" @click="deleteVariableGroup(row)" /></template></el-table-column>
+        <el-table-column label="操作" width="100"><template #default="{ row }"><el-button link :icon="Edit" title="编辑分组" v-hasPermi="['cost:lite:group:write', 'cost:lite:manage']" @click="openGroupEditor(row)" /><el-button link type="danger" :icon="Delete" title="删除分组" v-hasPermi="['cost:lite:group:write', 'cost:lite:manage']" @click="deleteVariableGroup(row)" /></template></el-table-column>
       </el-table>
     </el-dialog>
 
@@ -2656,38 +3463,57 @@ onMounted(initialize);
           </el-select>
         </el-form-item>
       </el-form>
-      <template #footer><el-button @click="groupEditorVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" @click="saveVariableGroup">保存</el-button></template>
+      <template #footer><el-button @click="groupEditorVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" v-hasPermi="['cost:lite:group:write', 'cost:lite:manage']" @click="saveVariableGroup">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="matrixDialogVisible" title="动态费率矩阵维护" width="96%" top="4vh" destroy-on-close>
+      <RateMatrixEditor
+        :columns="matrixColumns"
+        :rows="matrixRows"
+        :advanced-rules="matrixAdvancedRules"
+        :loading="loading.matrix"
+        :saving="matrixSaving"
+        @add="addMatrixRow"
+        @copy="copyMatrixRow"
+        @remove="deleteMatrixRow"
+        @advanced="openMatrixAdvanced"
+        @advanced-rule="openMatrixAdvanced"
+      />
+      <template #footer>
+        <el-button @click="matrixDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="matrixSaving" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="saveRateMatrix">保存矩阵</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="ruleDialogVisible" :title="ruleForm.ruleId ? '编辑费率规则' : '新增费率规则'" width="980px" destroy-on-close>
       <el-form ref="ruleFormRef" :model="ruleForm" :rules="ruleRules" label-width="96px">
         <div class="dialog-grid rule-base-grid">
-          <el-form-item label="规则编码" prop="ruleCode"><el-input v-model="ruleForm.ruleCode" /></el-form-item>
-          <el-form-item label="规则名称" prop="ruleName"><el-input v-model="ruleForm.ruleName" /></el-form-item>
+          <el-form-item label="规则编码" prop="ruleCode"><el-input v-model="ruleForm.ruleCode" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></el-form-item>
+          <el-form-item label="规则名称" prop="ruleName"><el-input v-model="ruleForm.ruleName" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></el-form-item>
           <el-form-item label="规则类型" prop="ruleType">
-            <el-select v-model="ruleForm.ruleType" @change="handleRuleTypeChange">
+            <el-select v-model="ruleForm.ruleType" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @change="handleRuleTypeChange">
               <el-option v-for="item in dictOptions('cost_rule_type')" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="优先级"><el-input-number v-model="ruleForm.priority" :min="0" /></el-form-item>
+          <el-form-item label="优先级"><el-input-number v-model="ruleForm.priority" :min="0" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></el-form-item>
           <el-form-item label="定价模式">
-            <el-select v-model="ruleForm.pricingMode" @change="syncGroupedPricingConfig">
+            <el-select v-model="ruleForm.pricingMode" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @change="syncGroupedPricingConfig">
               <el-option label="统一定价" value="TYPED" />
               <el-option label="按条件组定价" value="GROUPED" />
             </el-select>
           </el-form-item>
-          <el-form-item v-if="['FIXED_RATE','TIER_RATE'].includes(ruleForm.ruleType)" label="计量要素（单选）"><el-select v-model="ruleForm.quantityVariableCode" filterable><el-option v-for="item in variables" :key="item.variableCode" :label="`${item.variableName} (${item.variableCode})`" :value="item.variableCode" /></el-select></el-form-item>
-          <el-form-item v-if="ruleForm.ruleType === 'FIXED_RATE' && ruleForm.pricingMode !== 'GROUPED'" label="费率"><el-input-number v-model="ruleForm.pricingConfig.rateValue" :precision="6" :min="0" /></el-form-item>
-          <el-form-item v-if="ruleForm.ruleType === 'FIXED_AMOUNT' && ruleForm.pricingMode !== 'GROUPED'" label="固定金额"><el-input-number v-model="ruleForm.pricingConfig.amountValue" :precision="2" /></el-form-item>
-          <el-form-item v-if="ruleForm.ruleType === 'FORMULA'" label="公式编码"><el-select v-model="ruleForm.amountFormulaCode" clearable filterable><el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaName || item.formulaCode} (${item.formulaCode})`" :value="item.formulaCode" /></el-select></el-form-item>
-          <el-form-item v-if="ruleForm.ruleType === 'FORMULA'" label="手写公式" class="span-2"><el-input v-model="ruleForm.amountFormula" type="textarea" :rows="2" /></el-form-item>
+          <el-form-item v-if="['FIXED_RATE','TIER_RATE'].includes(ruleForm.ruleType)" label="计量要素（单选）"><el-select v-model="ruleForm.quantityVariableCode" filterable v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']"><el-option v-for="item in feeQuantityVariableOptions" :key="item.variableCode" :label="`${item.variableName} (${item.variableCode})`" :value="item.variableCode" /></el-select></el-form-item>
+          <el-form-item v-if="ruleForm.ruleType === 'FIXED_RATE' && ruleForm.pricingMode !== 'GROUPED'" label="费率"><el-input-number v-model="ruleForm.pricingConfig.rateValue" :precision="6" :min="0" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></el-form-item>
+          <el-form-item v-if="ruleForm.ruleType === 'FIXED_AMOUNT' && ruleForm.pricingMode !== 'GROUPED'" label="固定金额"><el-input-number v-model="ruleForm.pricingConfig.amountValue" :precision="2" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></el-form-item>
+          <el-form-item v-if="ruleForm.ruleType === 'FORMULA'" label="公式编码"><el-select v-model="ruleForm.amountFormulaCode" clearable filterable v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']"><el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaName || item.formulaCode} (${item.formulaCode})`" :value="item.formulaCode" /></el-select></el-form-item>
+          <el-form-item v-if="ruleForm.ruleType === 'FORMULA'" label="手写公式" class="span-2"><el-input v-model="ruleForm.amountFormula" type="textarea" :rows="2" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></el-form-item>
           <el-form-item label="条件逻辑">
-            <el-select v-model="ruleForm.conditionLogic" :disabled="ruleForm.pricingMode === 'GROUPED'">
+            <el-select v-model="ruleForm.conditionLogic" :disabled="ruleForm.pricingMode === 'GROUPED'" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']">
               <el-option v-for="item in dictOptions('cost_rule_condition_logic')" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="状态">
-            <el-select v-model="ruleForm.status">
+            <el-select v-model="ruleForm.status" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']">
               <el-option v-for="item in dictOptions('cost_rule_status')" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
@@ -2701,10 +3527,17 @@ onMounted(initialize);
             <span class="condition-group-note">组内条件为“且”，组间逻辑：{{ dictLabel('cost_rule_condition_logic', ruleForm.pricingMode === 'GROUPED' ? 'OR' : ruleForm.conditionLogic) }}</span>
           </div>
           <div class="editor-actions">
-            <el-button :icon="Plus" size="small" @click="addCondition">添加条件</el-button>
-            <el-button type="primary" :icon="Plus" size="small" @click="addConditionGroup">添加条件组</el-button>
+            <el-button :icon="Plus" size="small" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="addCondition">添加条件</el-button>
+            <el-button type="primary" :icon="Plus" size="small" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="addConditionGroup">添加条件组</el-button>
           </div>
         </div>
+        <el-alert
+          v-if="!feeVariableOptions.length"
+          title="当前费目尚未设置要素，规则条件和计量要素不会从整个场景变量池中自动放开。请先点击“设置要素”。"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
         <div v-if="conditionGroups.length" class="condition-groups">
           <section v-for="group in conditionGroups" :key="group.groupNo" class="condition-group">
             <div class="condition-group-header">
@@ -2713,22 +3546,22 @@ onMounted(initialize);
                 <el-tag size="small" effect="plain">{{ group.items.length }} 条条件</el-tag>
               </div>
               <div class="editor-actions">
-                <el-button link :icon="Plus" @click="addCondition(group.groupNo)">添加条件</el-button>
-                <el-button link type="danger" :icon="Delete" @click="removeConditionGroup(group.groupNo)">删除条件组</el-button>
+                <el-button link :icon="Plus" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="addCondition(group.groupNo)">添加条件</el-button>
+                <el-button link type="danger" :icon="Delete" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="removeConditionGroup(group.groupNo)">删除条件组</el-button>
               </div>
             </div>
             <el-table :data="group.items" size="small" border>
               <el-table-column label="要素" min-width="230">
                 <template #default="{ row }">
-                  <el-select v-model="row.condition.variableCode" filterable @change="handleConditionVariableChange(row.condition, $event)">
-                    <el-option v-for="item in variables" :key="item.variableCode" :label="`${item.variableName} (${item.variableCode})`" :value="item.variableCode" />
+                  <el-select v-model="row.condition.variableCode" filterable v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @change="handleConditionVariableChange(row.condition, $event)">
+                    <el-option v-for="item in feeVariableOptions" :key="item.variableCode" :label="`${item.variableName} (${item.variableCode})`" :value="item.variableCode" />
                   </el-select>
                 </template>
               </el-table-column>
               <el-table-column label="操作符" width="160">
                 <template #default="{ row }">
-                  <el-select v-model="row.condition.operatorCode" @change="handleConditionOperatorChange(row.condition, $event)">
-                    <el-option v-for="item in dictOptions('cost_rule_operator')" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-select v-model="row.condition.operatorCode" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @change="handleConditionOperatorChange(row.condition, $event)">
+                    <el-option v-for="item in conditionOperatorOptions(row.condition.variableCode)" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
                 </template>
               </el-table-column>
@@ -2739,11 +3572,15 @@ onMounted(initialize);
                     :operator-code="row.condition.operatorCode"
                     :variable-meta="variableMetaMap[row.condition.variableCode] || {}"
                     :dict-options-map="dictionaryOptions"
+                    :options="variableOptionMap[String(row.condition.variableCode || '')] || []"
+                    :options-loading="Boolean(variableOptionLoading[String(row.condition.variableCode || '')])"
+                    v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']"
+                    @search-options="handleConditionOptionSearch(variableMetaMap[row.condition.variableCode], $event)"
                   />
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="64">
-                <template #default="{ $index }"><el-button link type="danger" :icon="Delete" title="删除条件" @click="removeConditionFromGroup(group.groupNo, $index)" /></template>
+                <template #default="{ $index }"><el-button link type="danger" :icon="Delete" title="删除条件" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="removeConditionFromGroup(group.groupNo, $index)" /></template>
               </el-table-column>
             </el-table>
           </section>
@@ -2763,6 +3600,7 @@ onMounted(initialize);
                 :precision="ruleForm.ruleType === 'FIXED_RATE' ? 6 : 2"
                 :min="0"
                 :controls="false"
+                v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']"
                 @update:model-value="setGroupPricingValue(row.groupNo, $event)"
               />
             </template>
@@ -2771,14 +3609,14 @@ onMounted(initialize);
       </div>
 
       <div v-if="ruleForm.ruleType === 'TIER_RATE'" class="editor-section">
-        <div class="editor-section-header"><strong>阶梯费率</strong><el-button :icon="Plus" size="small" @click="addTier">添加阶梯</el-button></div>
+        <div class="editor-section-header"><strong>阶梯费率</strong><el-button :icon="Plus" size="small" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="addTier">添加阶梯</el-button></div>
         <el-table :data="ruleForm.tiers" size="small" border>
           <el-table-column prop="tierNo" label="#" width="52" />
-          <el-table-column label="起始值"><template #default="{ row }"><el-input-number v-model="row.startValue" :controls="false" /></template></el-table-column>
-          <el-table-column label="截止值"><template #default="{ row }"><el-input-number v-model="row.endValue" :controls="false" /></template></el-table-column>
-          <el-table-column label="费率"><template #default="{ row }"><el-input-number v-model="row.rateValue" :precision="6" :min="0" :controls="false" /></template></el-table-column>
-          <el-table-column label="区间" width="190"><template #default="{ row }"><el-select v-model="row.intervalMode"><el-option v-for="item in dictOptions('cost_rule_interval_mode')" :key="item.value" :label="item.label" :value="item.value" /></el-select></template></el-table-column>
-          <el-table-column label="操作" width="64"><template #default="{ $index }"><el-button link type="danger" :icon="Delete" title="删除阶梯" @click="removeTier($index)" /></template></el-table-column>
+          <el-table-column label="起始值"><template #default="{ row }"><el-input-number v-model="row.startValue" :controls="false" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></template></el-table-column>
+          <el-table-column label="截止值"><template #default="{ row }"><el-input-number v-model="row.endValue" :controls="false" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></template></el-table-column>
+          <el-table-column label="费率"><template #default="{ row }"><el-input-number v-model="row.rateValue" :precision="6" :min="0" :controls="false" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" /></template></el-table-column>
+          <el-table-column label="区间" width="190"><template #default="{ row }"><el-select v-model="row.intervalMode" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']"><el-option v-for="item in dictOptions('cost_rule_interval_mode')" :key="item.value" :label="item.label" :value="item.value" /></el-select></template></el-table-column>
+          <el-table-column label="操作" width="64"><template #default="{ $index }"><el-button link type="danger" :icon="Delete" title="删除阶梯" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="removeTier($index)" /></template></el-table-column>
         </el-table>
       </div>
       <div class="editor-section rule-preview-input">
@@ -2796,7 +3634,7 @@ onMounted(initialize);
           placeholder='例如：{"tradeType":"OUT","quantity":1}'
         />
       </div>
-      <template #footer><el-button :icon="View" @click="previewRule">预览</el-button><el-button @click="ruleDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" @click="saveRule">保存</el-button></template>
+      <template #footer><el-button :icon="View" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="previewRule">预览</el-button><el-button @click="ruleDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.saving" v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']" @click="saveRule">保存</el-button></template>
     </el-dialog>
 
     <el-dialog
@@ -2816,10 +3654,10 @@ onMounted(initialize);
       <el-form ref="formulaFormRef" :model="formulaForm" :rules="formulaRules" label-width="104px" class="formula-editor-form">
         <div class="dialog-grid">
           <el-form-item label="所属场景"><el-input :model-value="selectedScene?.sceneName" disabled /></el-form-item>
-          <el-form-item label="公式编码" prop="formulaCode"><el-input v-model="formulaForm.formulaCode" maxlength="64" /></el-form-item>
-          <el-form-item label="公式名称" prop="formulaName"><el-input v-model="formulaForm.formulaName" maxlength="128" /></el-form-item>
+          <el-form-item label="公式编码" prop="formulaCode"><el-input v-model="formulaForm.formulaCode" maxlength="64" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" /></el-form-item>
+          <el-form-item label="公式名称" prop="formulaName"><el-input v-model="formulaForm.formulaName" maxlength="128" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" /></el-form-item>
           <el-form-item label="返回类型" prop="returnType">
-            <el-select v-model="formulaForm.returnType" filterable>
+            <el-select v-model="formulaForm.returnType" filterable v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']">
               <el-option
                 v-for="item in dictOptions('cost_formula_return_type')"
                 :key="item.value"
@@ -2829,7 +3667,7 @@ onMounted(initialize);
             </el-select>
           </el-form-item>
           <el-form-item label="状态" prop="status">
-            <el-select v-model="formulaForm.status">
+            <el-select v-model="formulaForm.status" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']">
               <el-option
                 v-for="item in dictOptions('cost_formula_status')"
                 :key="item.value"
@@ -2839,9 +3677,9 @@ onMounted(initialize);
             </el-select>
           </el-form-item>
           <el-form-item label="命名空间">
-            <el-input v-model="formulaForm.namespaceScope" placeholder="例如 V,C,I,F,T" />
+            <el-input v-model="formulaForm.namespaceScope" placeholder="例如 V,C,I,F,T" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" />
           </el-form-item>
-          <el-form-item label="排序"><el-input-number v-model="formulaForm.sortNo" :min="0" :max="999999" /></el-form-item>
+          <el-form-item label="排序"><el-input-number v-model="formulaForm.sortNo" :min="0" :max="999999" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" /></el-form-item>
           <el-form-item label="中文业务公式" class="span-2">
             <el-input
               v-model="formulaForm.businessFormula"
@@ -2850,6 +3688,7 @@ onMounted(initialize);
               maxlength="1000"
               show-word-limit
               placeholder="例如：数量 × 单价，或填写业务人员能读懂的计算口径"
+              v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']"
             />
           </el-form-item>
           <el-form-item label="标准执行表达式" prop="formulaExpr" class="span-2">
@@ -2861,12 +3700,13 @@ onMounted(initialize);
               show-word-limit
               spellcheck="false"
               placeholder="例如：I.quantity * 2.5"
+              v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']"
             />
           </el-form-item>
           <el-form-item label="公式说明" class="span-2">
-            <el-input v-model="formulaForm.formulaDesc" type="textarea" :rows="2" maxlength="500" show-word-limit />
+            <el-input v-model="formulaForm.formulaDesc" type="textarea" :rows="2" maxlength="500" show-word-limit v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" />
           </el-form-item>
-          <el-form-item label="备注" class="span-2"><el-input v-model="formulaForm.remark" type="textarea" :rows="2" maxlength="500" /></el-form-item>
+          <el-form-item label="备注" class="span-2"><el-input v-model="formulaForm.remark" type="textarea" :rows="2" maxlength="500" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" /></el-form-item>
         </div>
       </el-form>
 
@@ -2876,11 +3716,11 @@ onMounted(initialize);
             <strong>公式试算</strong>
             <span class="condition-group-note">输入 JSON 会作为 I（调用输入）命名空间；需要测试 V/C/F/T 时可直接传对应对象。</span>
           </div>
-          <el-button type="primary" :icon="VideoPlay" :loading="loading.formulaTesting" @click="testFormula">
+          <el-button type="primary" :icon="VideoPlay" :loading="loading.formulaTesting" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" @click="testFormula">
             试算当前内容
           </el-button>
         </div>
-        <el-input v-model="formulaTestInputJson" type="textarea" :rows="5" spellcheck="false" placeholder='例如：{"quantity":8}' />
+        <el-input v-model="formulaTestInputJson" type="textarea" :rows="5" spellcheck="false" placeholder='例如：{"quantity":8}' v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" />
         <div v-if="Object.keys(formulaTestResult).length" class="formula-test-result">
           <div class="formula-test-result-header">
             <strong>试算结果</strong>
@@ -2891,7 +3731,7 @@ onMounted(initialize);
       </div>
       <template #footer>
         <el-button @click="formulaDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading.saving" @click="saveFormula">保存公式</el-button>
+        <el-button type="primary" :loading="loading.saving" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" @click="saveFormula">保存公式</el-button>
       </template>
     </el-dialog>
 
@@ -2922,7 +3762,7 @@ onMounted(initialize);
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" :icon="View" title="查看版本详情" @click="showFormulaVersion(row)" />
-            <el-button link type="warning" :icon="Refresh" title="回退为当前版" @click="rollbackFormulaVersion(row)" />
+            <el-button link type="warning" :icon="Refresh" title="回退为当前版" v-hasPermi="['cost:lite:formula:write', 'cost:lite:manage']" @click="rollbackFormulaVersion(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -2935,7 +3775,7 @@ onMounted(initialize);
         <el-form-item label="发布说明" prop="publishDesc"><el-input v-model="publishForm.publishDesc" type="textarea" :rows="4" maxlength="1000" show-word-limit /></el-form-item>
         <el-form-item label="立即生效"><el-switch v-model="publishForm.activateNow" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="publishDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.publishing" @click="publishVersion">确认发布</el-button></template>
+      <template #footer><el-button @click="publishDialogVisible = false">取消</el-button><el-button type="primary" :loading="loading.publishing" v-hasPermi="['cost:lite:publish', 'cost:lite:manage']" @click="publishVersion">确认发布</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="integrationDialogVisible" title="业务系统调用示例" width="1000px" destroy-on-close>
@@ -2961,7 +3801,7 @@ onMounted(initialize);
         show-icon
       >
         <template #default>
-          当前示例：{{ integrationExample.modeName }}，{{ integrationExample.feeName }}（{{ integrationExample.feeCode }}）。Starter 由宿主配置管理令牌并保护路由；独立 Jar 使用管理令牌。正式核算路径只在接口文档中说明，不在此处开放。
+         当前示例：{{ integrationExample.modeName }}，{{ integrationExample.feeName }}（{{ integrationExample.feeCode }}）。接口由业务系统后端通过宿主登录态和权限保护，浏览器不直接调用生产计费接口。
         </template>
       </el-alert>
       <el-tabs v-model="integrationExampleTab" class="integration-tabs">
@@ -2972,19 +3812,12 @@ onMounted(initialize);
           </div>
           <pre class="integration-code">{{ integrationExample.requestJson }}</pre>
         </el-tab-pane>
-        <el-tab-pane label="Starter 代理调用" name="starter">
+        <el-tab-pane label="内嵌接口调用" name="endpoint">
           <div class="integration-code-toolbar">
-            <span>{{ integrationExample.starterPath }}</span>
-            <el-button link :icon="CopyDocument" title="复制 Starter 调用示例" @click="copyText(integrationExample.starterCurl)" />
+            <span>{{ integrationExample.endpointPath }}</span>
+            <el-button link :icon="CopyDocument" title="复制内嵌接口调用示例" @click="copyText(integrationExample.curl)" />
           </div>
-          <pre class="integration-code">{{ integrationExample.starterCurl }}</pre>
-        </el-tab-pane>
-        <el-tab-pane label="独立 Jar 调用" name="runtime">
-          <div class="integration-code-toolbar">
-            <span>{{ integrationExample.runtimePath }}</span>
-            <el-button link :icon="CopyDocument" title="复制独立 Jar 调用示例" @click="copyText(integrationExample.runtimeCurl)" />
-          </div>
-          <pre class="integration-code">{{ integrationExample.runtimeCurl }}</pre>
+          <pre class="integration-code">{{ integrationExample.curl }}</pre>
         </el-tab-pane>
       </el-tabs>
       <div class="integration-params">
@@ -3054,6 +3887,7 @@ onMounted(initialize);
 .header-actions,
 .panel-title,
 .panel-actions,
+.panel-header-actions,
 .rule-heading,
 .rule-meta,
 .simulation-toolbar,
@@ -3173,6 +4007,16 @@ onMounted(initialize);
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid var(--line);
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.matrix-safety-note {
+  margin: 0 12px 10px;
 }
 
 .panel-title {
@@ -3647,6 +4491,47 @@ onMounted(initialize);
   justify-content: flex-end;
 }
 
+.fee-variable-config {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.fee-variable-pane {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fee-variable-pane-header {
+  min-height: 42px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.fee-variable-pane-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fee-variable-transfer-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.fee-variable-transfer-actions .el-button {
+  width: 100%;
+  margin-left: 0;
+}
+
 .dialog-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3929,6 +4814,14 @@ onMounted(initialize);
 
   .dialog-grid .span-2 {
     grid-column: auto;
+  }
+
+  .fee-variable-config {
+    grid-template-columns: 1fr;
+  }
+
+  .fee-variable-transfer-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .integration-context {

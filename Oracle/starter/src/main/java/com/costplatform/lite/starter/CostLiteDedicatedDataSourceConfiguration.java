@@ -30,9 +30,13 @@ public class CostLiteDedicatedDataSourceConfiguration {
     public HikariDataSource costLiteDataSource(Environment environment) {
         HikariDataSource dataSource = new HikariDataSource();
         Binder.get(environment).bind("cost.lite.datasource.hikari", Bindable.ofInstance(dataSource));
+        String jdbcUrl = environment.getProperty("cost.lite.datasource.url");
+        if (jdbcUrl == null || jdbcUrl.trim().isEmpty()) {
+            throw new IllegalStateException("cost.lite.datasource.mode=dedicated 时必须配置 cost.lite.datasource.url");
+        }
         dataSource.setDriverClassName(environment.getProperty(
                 "cost.lite.datasource.driver-class-name", "oracle.jdbc.OracleDriver"));
-        dataSource.setJdbcUrl(environment.getProperty("cost.lite.datasource.url"));
+        dataSource.setJdbcUrl(jdbcUrl);
         dataSource.setUsername(environment.getProperty("cost.lite.datasource.username"));
         dataSource.setPassword(environment.getProperty("cost.lite.datasource.password"));
         return dataSource;

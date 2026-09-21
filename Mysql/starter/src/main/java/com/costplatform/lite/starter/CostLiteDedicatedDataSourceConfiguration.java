@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
@@ -25,14 +25,21 @@ import org.springframework.core.env.Environment;
 @Conditional(CostLiteDataSourceModeCondition.Dedicated.class)
 @AutoConfigureBefore(DataSourceAutoConfiguration.class)
 public class CostLiteDedicatedDataSourceConfiguration {
-    @Bean(name = "costLiteDataSource", destroyMethod = "close")
+    @Bean(name = "costLiteDataSource", destroyMethod = "close", autowireCandidate = false,
+            defaultCandidate = false)
     @ConditionalOnMissingBean(name = "costLiteDataSource")
     public HikariDataSource costLiteDataSource(Environment environment) {
+        // 计费连接池必须保持专用，但不能成为宿主的默认 DataSource 候选。
+        // Starter 内部会按 Bean 名称取用它，宿主的 MyBatis/JDBC 自动配置只看到自己的主库。
         HikariDataSource dataSource = new HikariDataSource();
         Binder.get(environment).bind("cost.lite.datasource.hikari", Bindable.ofInstance(dataSource));
+        String jdbcUrl = environment.getProperty("cost.lite.datasource.url");
+        if (jdbcUrl == null || jdbcUrl.trim().isEmpty()) {
+            throw new IllegalStateException("cost.lite.datasource.mode=dedicated 时必须配置 cost.lite.datasource.url");
+        }
         dataSource.setDriverClassName(environment.getProperty(
                 "cost.lite.datasource.driver-class-name", "com.mysql.cj.jdbc.Driver"));
-        dataSource.setJdbcUrl(environment.getProperty("cost.lite.datasource.url"));
+        dataSource.setJdbcUrl(jdbcUrl);
         dataSource.setUsername(environment.getProperty("cost.lite.datasource.username"));
         dataSource.setPassword(environment.getProperty("cost.lite.datasource.password"));
         return dataSource;

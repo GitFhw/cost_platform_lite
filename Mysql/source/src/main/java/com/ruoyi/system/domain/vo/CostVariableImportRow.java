@@ -36,6 +36,15 @@ public class CostVariableImportRow {
     @Excel(name = "字典类型")
     private String dictType;
 
+    @Excel(name = "选项来源类型")
+    private String optionSourceType;
+
+    @Excel(name = "选项目录编码")
+    private String optionSourceCode;
+
+    @Excel(name = "选项配置JSON")
+    private String optionConfigJson;
+
     @Excel(name = "第三方接口")
     private String remoteApi;
 

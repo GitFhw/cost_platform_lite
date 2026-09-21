@@ -1,6 +1,6 @@
 # Oracle 同进程嵌入式集成
 
-Java 8 + Spring Boot 2.7.x Servlet 业务项目只引入 `cost-lite-starter-oracle`。计费 Controller、Service、Mapper 和核心规则执行在业务应用同一个 JVM 内运行，不启动单独的 Lite 进程，也不复制 `Oracle/source/`；入口不依赖若依包名。
+Java 8 + Spring Boot 2.7.x Servlet 业务项目只引入 `cost-lite-starter-oracle`。计费 Controller、Service、Mapper 和核心规则执行在业务应用同一个 JVM 内运行，不启动单独的 Lite 进程，也不复制 `Oracle/source/`；入口不依赖若依包名。数据源模式必须显式配置为 `dedicated`（分离版）或 `host`（同库版）。
 
 ## 1. 制品关系
 
@@ -35,11 +35,11 @@ mvn -f Oracle/pom.xml clean install -DskipTests
 
 ## 3. 配置计费数据库
 
-先由 DBA 执行 [cost-lite-schema.sql](sql/cost-lite-schema.sql)。这份默认脚本只创建工作台和试算所需表；正式任务、正式结果追溯、重算/告警或 OpenApp 只有在明确启用时，才继续执行 [cost-lite-formal-schema.sql](sql/cost-lite-formal-schema.sql)。计费表可以放在独立 Oracle Schema，也可以放在业务 Schema；只要 SQL 已初始化且 Starter 使用的 `DataSource` 用户可访问 `cost_*`、`sys_dict_type`、`sys_dict_data` 即可。
+分离版不在业务 Schema 初始化任何 `cost_*` 表；独立核算 Schema 的表结构由部署方按 [cost-lite-schema.sql](sql/cost-lite-schema.sql) 预先准备。同库版才把脚本执行到业务 Schema。正式任务、正式结果追溯、重算/告警或 OpenApp 只有在明确启用时，才继续执行 [cost-lite-formal-schema.sql](sql/cost-lite-formal-schema.sql)。
 
 ### 3.1 复用宿主业务数据源
 
-把 SQL 执行到宿主业务 Schema，省略 `cost.lite.datasource.url`，Starter 默认复用 Bean 名称为 `dataSource` 的宿主数据源：
+仅同库版把 SQL 执行到宿主业务 Schema，并明确设置 `cost.lite.datasource.mode=host`；Starter 复用 Bean 名称为 `dataSource` 的宿主数据源：
 
 ```yaml
 cost:
@@ -47,6 +47,7 @@ cost:
     embedded:
       enabled: true
     datasource:
+      mode: host
       host-bean-name: ${COST_LITE_HOST_DATASOURCE_BEAN:dataSource}
 ```
 
@@ -54,7 +55,7 @@ cost:
 
 ### 3.2 使用专用计费库
 
-把 SQL 执行到专用 Schema 后，按下面配置专用 Oracle 连接：
+分离版只连接已准备好的专用 Oracle Schema，业务 Schema 不执行计费表 DDL；按下面配置专用 Oracle 连接：
 
 在业务项目外部配置文件或配置中心加入：
 
@@ -66,8 +67,9 @@ cost:
     auth-enabled: false
     operator: ${COST_LITE_OPERATOR:lite-admin}
     datasource:
+      mode: dedicated
       driver-class-name: ${COST_LITE_DB_DRIVER:oracle.jdbc.OracleDriver}
-      url: ${COST_LITE_DB_URL:jdbc:oracle:thin:@//127.0.0.1:1521/FREEPDB1}
+      url: ${COST_LITE_DB_URL}
       username: ${COST_LITE_DB_USERNAME}
       password: ${COST_LITE_DB_PASSWORD}
       hikari:
@@ -75,10 +77,11 @@ cost:
         minimum-idle: 1
         maximum-pool-size: 10
         connection-timeout: 5000
+        initialization-fail-timeout: ${COST_LITE_DB_INITIALIZATION_FAIL_TIMEOUT:5000}
         validation-timeout: 3000
 ```
 
-数据库地址、账号和密码属于宿主外部配置，不写入 Jar、前端或 Git。Starter 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目自己的 `spring.datasource`。省略专用 URL 即切换到宿主数据源。
+数据库地址、账号和密码属于宿主外部配置，不写入 Jar、前端或 Git。Starter 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目自己的 `spring.datasource`。Starter 按 `mode` 选择数据源，不再仅根据 URL 是否为空猜测；健康接口只读检查当前数据源的必要表。
 
 ## 4. 入口和前端
 

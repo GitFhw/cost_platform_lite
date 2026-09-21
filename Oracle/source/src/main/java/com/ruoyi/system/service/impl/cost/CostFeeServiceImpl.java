@@ -8,10 +8,16 @@ import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.lite.config.CostLiteProperties;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.cost.CostFeeVariableRel;
 import com.ruoyi.system.domain.cost.CostScene;
+import com.ruoyi.system.domain.cost.CostVariable;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
+import com.ruoyi.system.domain.vo.CostFeeVariableContractVo;
+import com.ruoyi.system.domain.vo.CostFeeVariableRelSaveRequest;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
+import com.ruoyi.system.mapper.cost.CostFeeVariableRelMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
+import com.ruoyi.system.mapper.cost.CostVariableMapper;
 import com.ruoyi.system.service.cost.ICostFeeService;
 import com.ruoyi.system.service.cost.dictionary.CostDictionaryProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +41,12 @@ public class CostFeeServiceImpl implements ICostFeeService {
 
     @Autowired
     private CostSceneMapper sceneMapper;
+
+    @Autowired
+    private CostVariableMapper variableMapper;
+
+    @Autowired
+    private CostFeeVariableRelMapper feeVariableRelMapper;
 
     @Autowired
     private CostDictionaryProvider dictionaryProvider;
@@ -121,6 +133,95 @@ public class CostFeeServiceImpl implements ICostFeeService {
                 ? feeMapper.selectFeeResultRefs(feeId)
                 : Collections.emptyList());
         return check;
+    }
+
+    @Override
+    public List<CostFeeVariableContractVo> selectFeeVariableContracts(Long feeId) {
+        if (feeId == null) {
+            return Collections.emptyList();
+        }
+        List<CostFeeVariableContractVo> contracts = feeMapper.selectFeeVariableContracts(feeId);
+        return contracts == null ? Collections.emptyList() : contracts;
+    }
+
+    /**
+     * 替换手工设置的费目要素，保留规则服务生成的 RULE_DERIVED 关系。
+     */
+    @Override
+    @Transactional(transactionManager = "costLiteTransactionManager", rollbackFor = Exception.class)
+    public int replaceFeeVariableContracts(Long feeId, List<CostFeeVariableRelSaveRequest> requests, String operator) {
+        CostFeeItem fee = selectFeeById(feeId);
+        if (fee == null) {
+            throw new ServiceException("费目不存在，请刷新后重试");
+        }
+        List<CostFeeVariableRelSaveRequest> items = requests == null ? Collections.emptyList() : requests;
+        LinkedHashSet<Long> variableIds = new LinkedHashSet<>();
+        for (CostFeeVariableRelSaveRequest item : items) {
+            if (item == null || item.getVariableId() == null) {
+                throw new ServiceException("费目要素配置中存在未选择的要素");
+            }
+            if (!variableIds.add(item.getVariableId())) {
+                throw new ServiceException("同一个费目不能重复配置同一个要素");
+            }
+        }
+
+        Map<Long, CostVariable> variableMap = new LinkedHashMap<>();
+        if (!variableIds.isEmpty()) {
+            List<CostVariable> variables = variableMapper.selectList(Wrappers.<CostVariable>lambdaQuery()
+                    .eq(CostVariable::getSceneId, fee.getSceneId())
+                    .in(CostVariable::getVariableId, variableIds));
+            for (CostVariable variable : variables) {
+                variableMap.put(variable.getVariableId(), variable);
+            }
+        }
+
+        Set<String> relationTypes = new LinkedHashSet<>(Arrays.asList(
+                "REQUIRED", "OPTIONAL", "TIER_BASIS", "FORMULA_INPUT"));
+        List<CostFeeVariableRel> manualRelations = new ArrayList<>();
+        int index = 0;
+        for (CostFeeVariableRelSaveRequest item : items) {
+            CostVariable variable = variableMap.get(item.getVariableId());
+            if (variable == null) {
+                throw new ServiceException("费目要素不存在，或不属于当前费目所在场景：" + item.getVariableId());
+            }
+            if (!"0".equals(variable.getStatus())) {
+                throw new ServiceException(String.format("要素[%s]已停用，不能配置到费目", variable.getVariableName()));
+            }
+            String relationType = StringUtils.defaultIfEmpty(StringUtils.trim(item.getRelationType()), "OPTIONAL")
+                    .toUpperCase(Locale.ROOT);
+            if (!relationTypes.contains(relationType)) {
+                throw new ServiceException("不支持的费目要素关系类型：" + relationType);
+            }
+            if ("TIER_BASIS".equals(relationType) && !isNumericVariable(variable)) {
+                throw new ServiceException(String.format("要素[%s]不是数值类型，不能作为计量/阶梯依据", variable.getVariableName()));
+            }
+            CostFeeVariableRel relation = new CostFeeVariableRel();
+            relation.setSceneId(fee.getSceneId());
+            relation.setFeeId(feeId);
+            relation.setVariableId(variable.getVariableId());
+            relation.setRelationType(relationType);
+            relation.setSourceType("MANUAL_REQUIRED");
+            relation.setSourceRuleId(null);
+            relation.setSourceCode("FEE_ELEMENT_CONFIG");
+            relation.setSortNo(item.getSortNo() == null ? (index + 1) * 10 : item.getSortNo());
+            relation.setRemark(StringUtils.trim(item.getRemark()));
+            manualRelations.add(relation);
+            index++;
+        }
+
+        feeVariableRelMapper.delete(Wrappers.<CostFeeVariableRel>lambdaQuery()
+                .eq(CostFeeVariableRel::getFeeId, feeId)
+                .eq(CostFeeVariableRel::getSourceType, "MANUAL_REQUIRED"));
+        for (CostFeeVariableRel relation : manualRelations) {
+            feeVariableRelMapper.insert(relation);
+        }
+        return manualRelations.size();
+    }
+
+    private boolean isNumericVariable(CostVariable variable) {
+        String dataType = StringUtils.defaultString(variable == null ? null : variable.getDataType())
+                .toUpperCase(Locale.ROOT);
+        return Arrays.asList("NUMBER", "DECIMAL", "INTEGER", "LONG", "DOUBLE", "BIGDECIMAL").contains(dataType);
     }
 
     /**

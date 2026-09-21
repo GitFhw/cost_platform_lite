@@ -6,6 +6,7 @@ import com.ruoyi.lite.config.CostLiteProperties;
 import com.ruoyi.lite.web.CostLiteControllerSupport;
 import com.ruoyi.lite.web.CostLiteTableSupport;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.vo.CostFeeVariableRelSaveRequest;
 import com.ruoyi.system.service.cost.ICostFeeService;
 import javax.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 轻量费目维护接口。
@@ -56,6 +59,17 @@ public class CostLiteFeeController extends CostLiteControllerSupport {
     @GetMapping("/{feeId}")
     public AjaxResult detail(@PathVariable Long feeId) {
         return success(feeService.selectFeeById(feeId));
+    }
+
+    @GetMapping("/{feeId}/variables")
+    public AjaxResult variables(@PathVariable Long feeId) {
+        return success(feeService.selectFeeVariableContracts(feeId));
+    }
+
+    @PutMapping("/{feeId}/variables")
+    public AjaxResult saveVariables(@PathVariable Long feeId,
+                                    @RequestBody(required = false) List<CostFeeVariableRelSaveRequest> requests) {
+        return toAjax(feeService.replaceFeeVariableContracts(feeId, requests, operator()));
     }
 
     @PostMapping

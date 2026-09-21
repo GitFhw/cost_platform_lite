@@ -40,15 +40,24 @@ public class CostLiteDictionaryController extends CostLiteControllerSupport {
     @GetMapping("/options")
     public AjaxResult options(@RequestParam(value = "types", required = false) String types) {
         Set<String> requestedTypes = parseTypes(types);
-        Map<String, List<Map<String, String>>> result = new LinkedHashMap<>();
+        Map<String, List<Map<String, Object>>> result = new LinkedHashMap<>();
         for (String dictType : requestedTypes) {
-            List<Map<String, String>> options = new ArrayList<>();
+            List<Map<String, Object>> options = new ArrayList<>();
             List<SysDictData> rows = dictDataMapper.selectDictDataByType(dictType);
             if (rows != null) {
                 for (SysDictData row : rows) {
-                    Map<String, String> option = new LinkedHashMap<>();
+                    if (row == null) {
+                        continue;
+                    }
+                    Map<String, Object> option = new LinkedHashMap<>();
                     option.put("label", row.getDictLabel());
                     option.put("value", row.getDictValue());
+                    String status = row.getStatus();
+                    if (status != null && !status.trim().isEmpty() && !"0".equals(status)) {
+                        // Keep the historical code visible for audit/editing, but make
+                        // it impossible for new rules to select a disabled dictionary item.
+                        option.put("disabled", true);
+                    }
                     options.add(option);
                 }
             }

@@ -25,7 +25,7 @@ public class RemoteRequestBuilder {
     }
 
     public URI buildUri(RemoteVariableConfig config) {
-        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(config.remoteApi);
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(config.remoteApi);
         appendConfiguredQueryParams(builder, config.queryConfig);
         appendConfiguredPagination(builder, config.pageConfig);
         authHandler.appendAuthQueryParams(builder, config);

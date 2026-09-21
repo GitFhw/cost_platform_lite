@@ -19,6 +19,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="sourceType" column="source_type" />
         <result property="sourceSystem" column="source_system" />
         <result property="dictType" column="dict_type" />
+        <result property="optionSourceType" column="option_source_type" />
+        <result property="optionSourceCode" column="option_source_code" />
+        <result property="optionConfigJson" column="option_config_json" />
         <result property="remoteApi" column="remote_api" />
         <result property="requestMethod" column="request_method" />
         <result property="contentType" column="content_type" />
@@ -74,6 +77,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                v.source_type,
                v.source_system,
                v.dict_type,
+               v.option_source_type,
+               v.option_source_code,
+               v.option_config_json,
                v.remote_api,
                v.request_method,
                v.content_type,
