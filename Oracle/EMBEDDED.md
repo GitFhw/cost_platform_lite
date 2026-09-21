@@ -81,7 +81,7 @@ cost:
         validation-timeout: 3000
 ```
 
-数据库地址、账号和密码属于宿主外部配置，不写入 Jar、前端或 Git。Starter 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目自己的 `spring.datasource`。Starter 按 `mode` 选择数据源，不再仅根据 URL 是否为空猜测；健康接口只读检查当前数据源的必要表。
+数据库地址、账号和密码属于宿主外部配置，不写入 Jar、前端或 Git。Starter 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目自己的 `spring.datasource`。Starter 按 `mode` 选择数据源，未配置模式时安全默认使用 `dedicated`，不会根据 URL 是否为空切换到宿主库；同库版必须显式配置 `mode=host`。健康接口只读检查当前数据源的必要表。
 
 ## 4. 入口和前端
 

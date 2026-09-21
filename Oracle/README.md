@@ -2,7 +2,7 @@
 
 接口字段、场景级调用、指定费目调用和 Java/cURL 示例见：[Oracle/API.md](API.md)。
 
-本目录是可直接交付给第三方业务系统的 Oracle 集成包。Java 8 + Spring Boot 2.7 Servlet 项目推荐引入 `cost-lite-starter-oracle` 同进程接入；非 Boot/传统 SSM 项目使用无 Spring `cost-lite-client`，需要进程隔离时再使用独立 Jar。`source/` 保存本仓库维护用的 Oracle 计费核心源码；客户迁移只使用 Starter/Client/Jar、前端、配置和 SQL，不需要复制源码。同进程默认使用独立核算 Schema，业务项目必须提供 `COST_LITE_DB_URL`、`COST_LITE_DB_USERNAME` 和 `COST_LITE_DB_PASSWORD`，并使用 `cost.lite.datasource.mode=dedicated`；同库版必须明确使用 `mode=host` 并配置宿主 Bean。分离版业务 Schema 不执行核算表 DDL，同库版才在业务 Schema 执行对应 SQL。Starter 不再仅根据 URL 是否为空猜测模式。同进程说明见 [EMBEDDED.md](EMBEDDED.md)。
+本目录是可直接交付给第三方业务系统的 Oracle 集成包。Java 8 + Spring Boot 2.7 Servlet 项目推荐引入 `cost-lite-starter-oracle` 同进程接入；非 Boot/传统 SSM 项目使用无 Spring `cost-lite-client`，需要进程隔离时再使用独立 Jar。`source/` 保存本仓库维护用的 Oracle 计费核心源码；客户迁移只使用 Starter/Client/Jar、前端、配置和 SQL，不需要复制源码。同进程默认使用独立核算 Schema，业务项目必须提供 `COST_LITE_DB_URL`、`COST_LITE_DB_USERNAME` 和 `COST_LITE_DB_PASSWORD`，并使用 `cost.lite.datasource.mode=dedicated`；同库版必须明确使用 `mode=host` 并配置宿主 Bean。未配置模式时安全默认使用 `dedicated`，不再根据 URL 是否为空猜测模式；空的配置中心字段会回退到对应 `COST_LITE_*` 环境变量。分离版业务 Schema 不执行核算表 DDL，同库版才在业务 Schema 执行对应 SQL。同进程说明见 [EMBEDDED.md](EMBEDDED.md)。
 
 ## 1. 交付内容
 

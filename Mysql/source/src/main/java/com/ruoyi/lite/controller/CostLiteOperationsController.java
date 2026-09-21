@@ -124,8 +124,11 @@ public class CostLiteOperationsController extends CostLiteControllerSupport {
             return "DOWN";
         }
         String configuredMode = environment.getProperty("cost.lite.datasource.mode", "");
+        if (configuredMode == null || configuredMode.trim().isEmpty()) {
+            configuredMode = environment.getProperty("COST_LITE_DATASOURCE_MODE", "");
+        }
         result.put("dataSourceMode", configuredMode == null || configuredMode.trim().isEmpty()
-                ? "legacy-url-detection" : configuredMode.trim().toLowerCase(Locale.ROOT));
+                ? "dedicated" : configuredMode.trim().toLowerCase(Locale.ROOT));
         try (Connection connection = dataSource.getConnection()) {
             DatabaseMetaData metadata = connection.getMetaData();
             result.put("databaseProduct", metadata.getDatabaseProductName());

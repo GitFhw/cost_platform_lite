@@ -33,15 +33,27 @@ public class CostLiteDedicatedDataSourceConfiguration {
         // Starter 内部会按 Bean 名称取用它，宿主的 MyBatis/JDBC 自动配置只看到自己的主库。
         HikariDataSource dataSource = new HikariDataSource();
         Binder.get(environment).bind("cost.lite.datasource.hikari", Bindable.ofInstance(dataSource));
-        String jdbcUrl = environment.getProperty("cost.lite.datasource.url");
+        String jdbcUrl = firstNonBlank(environment.getProperty("cost.lite.datasource.url"),
+                environment.getProperty("COST_LITE_DB_URL"));
         if (jdbcUrl == null || jdbcUrl.trim().isEmpty()) {
             throw new IllegalStateException("cost.lite.datasource.mode=dedicated 时必须配置 cost.lite.datasource.url");
         }
-        dataSource.setDriverClassName(environment.getProperty(
-                "cost.lite.datasource.driver-class-name", "com.mysql.cj.jdbc.Driver"));
+        dataSource.setDriverClassName(firstNonBlank(environment.getProperty("cost.lite.datasource.driver-class-name"),
+                environment.getProperty("COST_LITE_DB_DRIVER"), "com.mysql.cj.jdbc.Driver"));
         dataSource.setJdbcUrl(jdbcUrl);
-        dataSource.setUsername(environment.getProperty("cost.lite.datasource.username"));
-        dataSource.setPassword(environment.getProperty("cost.lite.datasource.password"));
+        dataSource.setUsername(firstNonBlank(environment.getProperty("cost.lite.datasource.username"),
+                environment.getProperty("COST_LITE_DB_USERNAME")));
+        dataSource.setPassword(firstNonBlank(environment.getProperty("cost.lite.datasource.password"),
+                environment.getProperty("COST_LITE_DB_PASSWORD")));
         return dataSource;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value;
+            }
+        }
+        return null;
     }
 }

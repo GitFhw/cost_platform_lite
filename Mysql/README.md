@@ -19,7 +19,7 @@
 
 ### 1.1 配置归属和组件职责
 
-数据库账号密码不打进 Jar，也不写入 Git。当前交付默认使用独立核算库，业务应用必须提供 `COST_LITE_DB_URL`、`COST_LITE_DB_USERNAME` 和 `COST_LITE_DB_PASSWORD`，并使用 `cost.lite.datasource.mode=dedicated`；同库版必须明确使用 `mode=host` 并配置宿主 Bean。Starter 不再仅根据 URL 是否为空猜测模式。分离版业务库不执行核算表 DDL，同库版才在业务库执行对应 SQL。旧独立服务和 HTTP Starter 的配置不属于当前嵌入集成。
+数据库账号密码不打进 Jar，也不写入 Git。当前交付默认使用独立核算库，业务应用必须提供 `COST_LITE_DB_URL`、`COST_LITE_DB_USERNAME` 和 `COST_LITE_DB_PASSWORD`，并使用 `cost.lite.datasource.mode=dedicated`；同库版必须明确使用 `mode=host` 并配置宿主 Bean。Starter 未配置模式时安全默认使用 `dedicated`，不再根据 URL 是否为空猜测模式；空的配置中心字段会回退到对应 `COST_LITE_*` 环境变量。分离版业务库不执行核算表 DDL，同库版才在业务库执行对应 SQL。旧独立服务和 HTTP Starter 的配置不属于当前嵌入集成。
 
 嵌入后首次验证必须先访问 `/cost/lite/health`。若 `database=DOWN`，先检查实际生效的 `cost.lite.datasource.url`、账号、密码和 `cost-lite-starter-mysql` 版本；不要只看业务接口的 MyBatis 异常。业务项目使用本地 Maven 仓库时，必须重新安装 Starter，使它传递的 Core 与当前版本一致。
 

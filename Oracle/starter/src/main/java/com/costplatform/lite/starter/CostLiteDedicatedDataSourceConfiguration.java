@@ -30,15 +30,27 @@ public class CostLiteDedicatedDataSourceConfiguration {
     public HikariDataSource costLiteDataSource(Environment environment) {
         HikariDataSource dataSource = new HikariDataSource();
         Binder.get(environment).bind("cost.lite.datasource.hikari", Bindable.ofInstance(dataSource));
-        String jdbcUrl = environment.getProperty("cost.lite.datasource.url");
+        String jdbcUrl = firstNonBlank(environment.getProperty("cost.lite.datasource.url"),
+                environment.getProperty("COST_LITE_DB_URL"));
         if (jdbcUrl == null || jdbcUrl.trim().isEmpty()) {
             throw new IllegalStateException("cost.lite.datasource.mode=dedicated 时必须配置 cost.lite.datasource.url");
         }
-        dataSource.setDriverClassName(environment.getProperty(
-                "cost.lite.datasource.driver-class-name", "oracle.jdbc.OracleDriver"));
+        dataSource.setDriverClassName(firstNonBlank(environment.getProperty("cost.lite.datasource.driver-class-name"),
+                environment.getProperty("COST_LITE_DB_DRIVER"), "oracle.jdbc.OracleDriver"));
         dataSource.setJdbcUrl(jdbcUrl);
-        dataSource.setUsername(environment.getProperty("cost.lite.datasource.username"));
-        dataSource.setPassword(environment.getProperty("cost.lite.datasource.password"));
+        dataSource.setUsername(firstNonBlank(environment.getProperty("cost.lite.datasource.username"),
+                environment.getProperty("COST_LITE_DB_USERNAME")));
+        dataSource.setPassword(firstNonBlank(environment.getProperty("cost.lite.datasource.password"),
+                environment.getProperty("COST_LITE_DB_PASSWORD")));
         return dataSource;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value;
+            }
+        }
+        return null;
     }
 }

@@ -85,7 +85,7 @@ cost:
         initialization-fail-timeout: ${COST_LITE_DB_INITIALIZATION_FAIL_TIMEOUT:5000}
 ```
 
-Lite 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目原有的 `spring.datasource`。数据库密码只通过环境变量或配置中心提供，不写入 Git。Starter 会传递 MySQL JDBC 驱动；业务项目无需再复制核心源码。Starter 按 `mode` 选择数据源，不再仅根据 URL 是否为空猜测；分离版和同库版的 SQL 初始化责任也不混淆。
+Lite 使用命名 Bean `costLiteDataSource`、`costLiteSqlSessionFactory` 和 `costLiteTransactionManager`，不会覆盖业务项目原有的 `spring.datasource`。数据库密码只通过环境变量或配置中心提供，不写入 Git。Starter 会传递 MySQL JDBC 驱动；业务项目无需再复制核心源码。Starter 按 `mode` 选择数据源，未配置模式时安全默认使用 `dedicated`，不会根据 URL 是否为空切换到宿主库；同库版必须显式配置 `mode=host`。分离版和同库版的 SQL 初始化责任也不混淆。
 
 ## 4. 自动注册后的接口
 

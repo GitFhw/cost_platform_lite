@@ -26,11 +26,21 @@ public class CostLiteHostDataSourceConfiguration {
     @ConditionalOnMissingBean(name = "costLiteDataSource")
     public DataSource costLiteDataSource(Environment environment,
                                          ConfigurableListableBeanFactory beanFactory) {
-        String hostBeanName = environment.getProperty("cost.lite.datasource.host-bean-name", "dataSource");
+        String hostBeanName = firstNonBlank(environment.getProperty("cost.lite.datasource.host-bean-name"),
+                environment.getProperty("COST_LITE_HOST_DATASOURCE_BEAN"), "dataSource");
         if ("costLiteDataSource".equals(hostBeanName) || !beanFactory.containsBean(hostBeanName)) {
             throw new IllegalStateException("cost.lite.datasource.mode=host 时，宿主不存在名为 "
                     + hostBeanName + " 的 DataSource Bean");
         }
         return beanFactory.getBean(hostBeanName, DataSource.class);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value;
+            }
+        }
+        return null;
     }
 }
