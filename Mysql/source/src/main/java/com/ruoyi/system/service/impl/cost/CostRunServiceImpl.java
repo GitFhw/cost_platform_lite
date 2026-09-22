@@ -2439,8 +2439,12 @@ public class CostRunServiceImpl implements ICostRunService {
                 RuntimeVariable variable = new RuntimeVariable();
                 variable.variableCode = stringValue(json.get("variableCode"));
                 variable.variableName = stringValue(json.get("variableName"));
+                variable.variableType = stringValue(json.get("variableType"));
                 variable.sourceType = stringValue(json.get("sourceType"));
                 variable.sourceSystem = stringValue(json.get("sourceSystem"));
+                variable.dictType = stringValue(json.get("dictType"));
+                variable.optionSourceType = stringValue(json.get("optionSourceType"));
+                variable.optionSourceCode = stringValue(json.get("optionSourceCode"));
                 variable.dataType = stringValue(json.get("dataType"));
                 variable.remoteApi = stringValue(json.get("remoteApi"));
                 variable.authType = stringValue(json.get("authType"));
@@ -2638,8 +2642,12 @@ public class CostRunServiceImpl implements ICostRunService {
             RuntimeVariable runtimeVariable = new RuntimeVariable();
             runtimeVariable.variableCode = variable.getVariableCode();
             runtimeVariable.variableName = variable.getVariableName();
+            runtimeVariable.variableType = variable.getVariableType();
             runtimeVariable.sourceType = variable.getSourceType();
             runtimeVariable.sourceSystem = variable.getSourceSystem();
+            runtimeVariable.dictType = variable.getDictType();
+            runtimeVariable.optionSourceType = variable.getOptionSourceType();
+            runtimeVariable.optionSourceCode = variable.getOptionSourceCode();
             runtimeVariable.dataType = variable.getDataType();
             runtimeVariable.remoteApi = variable.getRemoteApi();
             runtimeVariable.authType = variable.getAuthType();
@@ -5125,8 +5133,12 @@ public class CostRunServiceImpl implements ICostRunService {
     public static class RuntimeVariable {
         public String variableCode;
         public String variableName;
+        public String variableType;
         public String sourceType;
         public String sourceSystem;
+        public String dictType;
+        public String optionSourceType;
+        public String optionSourceCode;
         public String dataType;
         public String remoteApi;
         public String authType;

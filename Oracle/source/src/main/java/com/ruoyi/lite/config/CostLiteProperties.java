@@ -253,6 +253,26 @@ public class CostLiteProperties {
         }
 
         /**
+         * 将宿主字典中保存的值还原为计费规则使用的统一编码。
+         *
+         * @param dictType 计费统一字典类型
+         * @param storedValue 宿主字典中的值
+         * @return 计费统一编码；没有映射时原样返回
+         */
+        public String resolveCanonicalValue(String dictType, String storedValue) {
+            Map<String, String> mappings = valueMappings.get(dictType);
+            if (mappings == null || mappings.isEmpty()) {
+                return storedValue;
+            }
+            for (Map.Entry<String, String> entry : mappings.entrySet()) {
+                if (hasText(entry.getValue()) && entry.getValue().trim().equals(storedValue)) {
+                    return entry.getKey();
+                }
+            }
+            return storedValue;
+        }
+
+        /**
          * 查找配置型字典允许值。配置既可继续使用统一类型，也可直接使用映射后的宿主类型。
          */
         public List<String> findConfiguredValues(String dictType) {

@@ -46,6 +46,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where status = '0' and dict_type = #{dictType} order by dict_sort asc
     </select>
 
+    <select id="selectAllDictDataByType" parameterType="String" resultMap="SysDictDataResult">
+        <include refid="selectDictDataVo"/>
+        where dict_type = #{dictType} order by dict_sort asc
+    </select>
+
     <select id="selectDictLabel" resultType="String">
         select dict_label from sys_dict_data
         where dict_type = #{dictType} and dict_value = #{dictValue}

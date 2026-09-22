@@ -119,17 +119,23 @@ public class CostLiteVariableOptionController extends CostLiteControllerSupport 
             throw new ServiceException("平台字典选项必须使用 cost_ 前缀字典");
         }
         String normalizedKeyword = StringUtils.defaultIfEmpty(StringUtils.trim(keyword), "").toLowerCase(Locale.ROOT);
-        List<SysDictData> sourceRows = dictDataMapper.selectDictDataByType(dictType);
+        // 历史规则可能仍引用已停用编码；返回全量并由前端置灰，新增保存仍由服务端校验启用状态。
+        String storageDictType = properties.getDictionary().resolveType(dictType);
+        List<SysDictData> sourceRows = dictDataMapper.selectAllDictDataByType(storageDictType);
         List<CostLiteOption> rows = new ArrayList<>();
         if (sourceRows != null) {
             sourceRows.stream()
                     .filter(row -> row != null)
                     .filter(row -> normalizedKeyword.isEmpty()
                             || containsIgnoreCase(row.getDictLabel(), normalizedKeyword)
-                            || containsIgnoreCase(row.getDictValue(), normalizedKeyword))
+                            || containsIgnoreCase(row.getDictValue(), normalizedKeyword)
+                            || containsIgnoreCase(properties.getDictionary()
+                            .resolveCanonicalValue(dictType, row.getDictValue()), normalizedKeyword))
                     .sorted(Comparator.comparingLong(row -> row.getDictSort() == null ? Long.MAX_VALUE : row.getDictSort()))
                     .forEach(row -> {
-                        CostLiteOption option = new CostLiteOption(row.getDictValue(), row.getDictLabel());
+                        CostLiteOption option = new CostLiteOption(
+                                properties.getDictionary().resolveCanonicalValue(dictType, row.getDictValue()),
+                                row.getDictLabel());
                         option.setDisabled(StringUtils.isNotEmpty(row.getStatus()) && !"0".equals(row.getStatus()));
                         rows.add(option);
                     });

@@ -265,8 +265,8 @@ const editorHint = computed(() => {
   if (isDateOnly.value && isBetweenOperator.value) return "日期区间会保存为“起始日期,截止日期”。";
   if (isDateTime.value && isBetweenOperator.value) return "日期时间区间保留到秒，保存为“起始时间,截止时间”。";
   if (isTimeOnly.value && isBetweenOperator.value) return "时刻区间保留到秒，跨日语义仍需母体执行链明确。";
-  if (isDateTime.value) return "日期时间保留到秒；正式开放更多比较操作前需完成母体类型化执行回归。";
-  if (isTimeOnly.value) return "时刻保留到秒；每日时段和跨日区间需由母体定义结构化语义。";
+  if (isDateTime.value) return "日期时间保留到秒，支持等于、比较和闭区间；运行链按类型比较，不按数字解析。";
+  if (isTimeOnly.value) return "时刻保留到秒；起始时刻大于截止时刻表示跨午夜，起止相等只命中该时刻。";
   if (isDateOnly.value) return "日期变量使用自然日选择器。";
   if (isBoolean.value) return "布尔变量使用是/否下拉。";
   return isMultiValueOperator.value ? "多个文本值请用英文逗号分隔。" : "文本变量按普通输入处理。";

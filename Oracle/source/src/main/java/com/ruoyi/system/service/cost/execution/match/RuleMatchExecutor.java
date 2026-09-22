@@ -5,6 +5,7 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.service.cost.execution.model.ConditionMatchResult;
 import com.ruoyi.system.service.cost.execution.model.RuleMatchResult;
 import com.ruoyi.system.service.cost.execution.node.PricingSupport;
+import com.ruoyi.system.service.cost.execution.CostConditionValueSupport;
 import com.ruoyi.system.service.impl.cost.CostRunServiceImpl;
 import org.springframework.stereotype.Component;
 
@@ -26,7 +27,7 @@ public class RuleMatchExecutor {
         RuleMatchResult fallbackResult = includeExplain ? new RuleMatchResult() : null;
         for (CostRunServiceImpl.RuntimeRule rule : rules) {
             List<Map<String, Object>> conditionExplain = new ArrayList<>();
-            ConditionMatchResult conditionMatchResult = matchConditions(rule, variableValues, conditionContext, conditionExplain, support);
+            ConditionMatchResult conditionMatchResult = matchConditions(rule, variableValues, conditionContext, conditionExplain, variableMap, support);
             if (conditionMatchResult.matched && !matchQuantityInputPresence(rule, baseContext, variableMap, conditionExplain)) {
                 conditionMatchResult.matched = false;
                 conditionMatchResult.matchedGroupNo = null;
@@ -101,6 +102,7 @@ public class RuleMatchExecutor {
                                                  Map<String, Object> variableValues,
                                                  Map<String, Object> conditionContext,
                                                  List<Map<String, Object>> explain,
+                                                 Map<String, CostRunServiceImpl.RuntimeVariable> variableMap,
                                                  PricingSupport support) {
         ConditionMatchResult result = new ConditionMatchResult();
         if (rule.conditionGroups == null || rule.conditionGroups.isEmpty()) {
@@ -113,7 +115,8 @@ public class RuleMatchExecutor {
             boolean groupPass = true;
             for (CostRunServiceImpl.RuntimeCondition condition : group.conditions) {
                 Object leftValue = variableValues.get(condition.variableCode);
-                boolean pass = evaluateCondition(condition, leftValue, conditionContext, support);
+                CostRunServiceImpl.RuntimeVariable variable = variableMap == null ? null : variableMap.get(condition.variableCode);
+                boolean pass = evaluateCondition(condition, leftValue, conditionContext, variable, support);
                 LinkedHashMap<String, Object> item = new LinkedHashMap<>();
                 item.put("groupNo", group.groupNo);
                 item.put("displayName", condition.displayName);
@@ -147,48 +150,19 @@ public class RuleMatchExecutor {
     private boolean evaluateCondition(CostRunServiceImpl.RuntimeCondition condition,
                                       Object leftValue,
                                       Map<String, Object> context,
+                                      CostRunServiceImpl.RuntimeVariable variable,
                                       PricingSupport support) {
         String operatorCode = condition.operatorCode;
         if (OP_EXPR.equals(operatorCode)) {
             Object exprResult = support.evaluateExpression(condition.compareValue, context);
             return Boolean.TRUE.equals(convertBoolean(exprResult));
         }
-        if (OP_IN.equals(operatorCode) || OP_NOT_IN.equals(operatorCode)) {
-            List<String> values = splitValues(condition.compareValue);
-            boolean contains = values.contains(String.valueOf(leftValue));
-            return OP_IN.equals(operatorCode) ? contains : !contains;
+        if (variable == null) {
+            return false;
         }
-        if (OP_BETWEEN.equals(operatorCode)) {
-            List<String> values = splitValues(condition.compareValue);
-            if (values.size() < 2) {
-                return false;
-            }
-            BigDecimal left = support.toBigDecimal(leftValue);
-            BigDecimal start = support.toBigDecimal(values.get(0));
-            BigDecimal end = support.toBigDecimal(values.get(1));
-            if (left == null || start == null || end == null) {
-                return false;
-            }
-            return left.compareTo(start) >= 0 && left.compareTo(end) <= 0;
-        }
-        BigDecimal leftNumber = support.toBigDecimal(leftValue);
-        BigDecimal rightNumber = support.toBigDecimal(condition.compareValue);
-        switch (operatorCode) {
-            case OP_EQ:
-                return Objects.equals(String.valueOf(leftValue), String.valueOf(condition.compareValue));
-            case OP_NE:
-                return !Objects.equals(String.valueOf(leftValue), String.valueOf(condition.compareValue));
-            case OP_GT:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) > 0;
-            case OP_GE:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) >= 0;
-            case OP_LT:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) < 0;
-            case OP_LE:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) <= 0;
-            default:
-                return false;
-        }
+        return CostConditionValueSupport.matches(leftValue, condition.compareValue, operatorCode,
+                variable.dataType, variable.variableType, variable.sourceType,
+                variable.optionSourceType, variable.dictType);
     }
 
     private CostRunServiceImpl.RuntimeTier locateTier(List<CostRunServiceImpl.RuntimeTier> tiers, BigDecimal quantityValue) {

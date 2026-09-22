@@ -16,9 +16,11 @@ public class PublishValidationChain {
     public PublishValidationChain(BasicPublishValidationRule basicRule,
                                   FormulaPublishValidationRule formulaRule,
                                   RuleReferencePublishValidationRule referenceRule,
+                                  TypedConditionPublishValidationRule typedConditionRule,
                                   PublishablePublishValidationRule publishableRule,
                                   VersionDiffPublishValidationRule versionDiffRule) {
-        this.rules = Arrays.asList(basicRule, formulaRule, referenceRule, publishableRule, versionDiffRule);
+        this.rules = Arrays.asList(basicRule, formulaRule, referenceRule, typedConditionRule,
+                publishableRule, versionDiffRule);
     }
 
     public void validate(PublishValidationContext context, List<CostPublishCheckItemVo> items) {

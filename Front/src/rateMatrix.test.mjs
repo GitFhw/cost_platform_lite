@@ -23,6 +23,7 @@ const variables = [
     options: [
       { label: "外贸", value: "OUT" },
       { label: "内贸", value: "IN" },
+      { label: "国内", value: "DOM" },
       { label: "停用", value: "DISABLED", disabled: true },
     ],
     hasOptionSnapshot: true,
@@ -76,7 +77,7 @@ test("matrix columns follow configured fee variables and exclude master/date/tie
   const columns = matrixColumnsFromVariables(variables);
   assert.deepEqual(columns.map((item) => item.variableCode), ["tradeType"]);
   assert.equal(columns[0].matrixType, "option");
-  assert.deepEqual(columns[0].operators.map((item) => item.value), ["EQ"]);
+  assert.deepEqual(columns[0].operators.map((item) => item.value), ["EQ", "IN"]);
 });
 
 test("simple fixed rule maps to explicit wildcard cells and round-trips to EQ conditions", () => {
@@ -108,19 +109,43 @@ test("only the explicit ALL token is omitted from persisted conditions", () => {
   assert.ok(validateMatrixRows([row], columns).errors.some((item) => item.code === "MISSING_CELL"));
 });
 
-test("grouped, tiered, IN and unknown-column rules stay in advanced mode", () => {
+test("grouped, tiered and unknown-column rules stay in advanced mode", () => {
   const columns = matrixColumnsFromVariables([variables[0]]);
   assert.equal(isMatrixCompatibleRule({ ...fixedRule, pricingMode: "GROUPED" }, columns), false);
   assert.equal(isMatrixCompatibleRule({ ...fixedRule, ruleType: "TIER_RATE" }, columns), false);
   assert.equal(isMatrixCompatibleRule({
     ...fixedRule,
-    conditions: [{ ...fixedRule.conditions[0], operatorCode: "IN", compareValue: "OUT,IN" }],
-}, columns), false);
-  assert.equal(isMatrixCompatibleRule({
-    ...fixedRule,
     conditions: [{ ...fixedRule.conditions[0], variableCode: "cargoType" }],
   }, columns), false);
   assert.equal(ruleToMatrixRow({ ...fixedRule, pricingMode: "GROUPED" }, columns), null);
+});
+
+test("dictionary matrix supports IN with multiple active values and round-trips it", () => {
+  const columns = matrixColumnsFromVariables([variables[0]]);
+  const rule = {
+    ...fixedRule,
+    conditions: [{ ...fixedRule.conditions[0], operatorCode: "IN", compareValue: "OUT,IN" }],
+  };
+  assert.equal(isMatrixCompatibleRule(rule, columns), true);
+  const row = ruleToMatrixRow(rule, columns);
+  assert.deepEqual(row.cells.tradeType, { operatorCode: "IN", value: "OUT,IN" });
+  assert.equal(validateMatrixRows([row], columns).errors.length, 0);
+  const payload = matrixRowToRulePayload(row, columns, { sceneId: 7, feeId: 8 });
+  assert.deepEqual(payload.conditions.map((item) => [item.operatorCode, item.compareValue]), [["IN", "OUT,IN"]]);
+});
+
+test("dictionary IN overlap uses set intersection and canonical signatures", () => {
+  const columns = matrixColumnsFromVariables([variables[0]]);
+  const first = createEmptyMatrixRow(columns, { ruleCode: "R-IN-1", priority: 100 });
+  first.cells.tradeType = { operatorCode: "IN", value: "OUT,IN" };
+  const sameSet = createEmptyMatrixRow(columns, { ruleCode: "R-IN-2", priority: 100 });
+  sameSet.cells.tradeType = { operatorCode: "IN", value: "IN,OUT" };
+  const disjoint = createEmptyMatrixRow(columns, { ruleCode: "R-EQ-DISJOINT", priority: 100 });
+  disjoint.cells.tradeType = { operatorCode: "EQ", value: "DOM" };
+  const duplicateResult = validateMatrixRows([first, sameSet], columns);
+  assert.ok(duplicateResult.errors.some((item) => item.code === "DUPLICATE"));
+  const disjointResult = validateMatrixRows([first, disjoint], columns);
+  assert.equal(disjointResult.errors.length, 0);
 });
 
 test("formula and structured date/time variables stay in advanced mode", () => {
@@ -388,6 +413,25 @@ test("numeric interval comparisons preserve decimal precision beyond safe intege
 
 test("unknown variable metadata fails closed for advanced operators", () => {
   assert.deepEqual(operatorOptionsForVariable({ variableCode: "missingType" }), []);
+});
+
+test("date and time variables expose typed advanced comparison operators", () => {
+  assert.deepEqual(
+    operatorOptionsForVariable({ dataType: "DATE" }).map((item) => item.value),
+    ["EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "IS_NULL", "IS_NOT_NULL"],
+  );
+  assert.deepEqual(
+    operatorOptionsForVariable({ dataType: "TIME_OF_DAY" }).map((item) => item.value),
+    ["EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "IS_NULL", "IS_NOT_NULL"],
+  );
+  assert.deepEqual(
+    operatorOptionsForVariable({ dataType: "TIMESTAMP" }).map((item) => item.value),
+    ["EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "IS_NULL", "IS_NOT_NULL"],
+  );
+  assert.deepEqual(
+    operatorOptionsForVariable({ dataType: "LOCALTIME" }).map((item) => item.value),
+    ["EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "IS_NULL", "IS_NOT_NULL"],
+  );
 });
 
 test("numeric aliases use the same typed matrix policy as NUMBER", () => {

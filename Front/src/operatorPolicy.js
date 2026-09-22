@@ -42,6 +42,8 @@ export const TIME_DATA_TYPES = new Set([
   "TIME_OF_DAY",
   "TIME_OF_DAY_RANGE",
   "TIME_RANGE",
+  "LOCALTIME",
+  "LOCALTIME_RANGE",
 ]);
 
 export const DATE_DATA_TYPES = new Set([
@@ -76,21 +78,22 @@ const OPERATOR_VALUE_FLAGS = Object.freeze({
 });
 
 const MATRIX_OPERATORS = Object.freeze({
-  option: ["EQ"],
+  // Dictionary columns support a bounded multi-select. The persisted value is
+  // still the platform's stable comma-delimited code list, while the advanced
+  // editor keeps NOT_IN and null checks for cases that are not safe to express
+  // as a row dimension.
+  option: ["EQ", "IN"],
   boolean: ["EQ"],
   number: ["EQ", "GT", "GE", "LT", "LE"],
   text: ["EQ"],
 });
 
-// Date comparisons are intentionally limited until the mother runtime has a
-// typed date/time comparator. This prevents a date picker from promising a
-// range that the execution chain still treats as BigDecimal.
 const ADVANCED_OPERATORS = Object.freeze({
   option: ["EQ", "NE", "IN", "NOT_IN", "IS_NULL", "IS_NOT_NULL"],
   boolean: ["EQ", "NE", "IS_NULL", "IS_NOT_NULL"],
   number: ["EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "IN", "NOT_IN", "IS_NULL", "IS_NOT_NULL"],
   text: ["EQ", "NE", "IN", "NOT_IN", "IS_NULL", "IS_NOT_NULL"],
-  date: ["EQ", "NE", "IS_NULL", "IS_NOT_NULL"],
+  date: ["EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "IS_NULL", "IS_NOT_NULL"],
   master: ["EQ", "NE", "IN", "NOT_IN", "IS_NULL", "IS_NOT_NULL"],
   json: ["IS_NULL", "IS_NOT_NULL", "EXPR"],
   formula: ["EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN", "EXPR", "IS_NULL", "IS_NOT_NULL"],

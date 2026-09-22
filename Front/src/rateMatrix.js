@@ -221,6 +221,26 @@ function activeOption(column, value) {
   return options.some((option) => String(option.value) === String(value) && option.disabled !== true);
 }
 
+function splitCellValues(value) {
+  const rawValues = Array.isArray(value) ? value : String(value ?? "").split(",");
+  const result = [];
+  const seen = new Set();
+  rawValues.forEach((item) => {
+    const normalizedValue = String(item ?? "").trim();
+    if (!normalizedValue || seen.has(normalizedValue)) return;
+    seen.add(normalizedValue);
+    result.push(normalizedValue);
+  });
+  return result;
+}
+
+function optionValueSet(cell) {
+  if (cell.operatorCode === "EQ" || cell.operatorCode === "IN") {
+    return new Set(splitCellValues(cell.value));
+  }
+  return null;
+}
+
 export function isMatrixCompatibleRule(rule, columns = []) {
   if (!rule || !MATRIX_RULE_TYPES.has(normalized(rule.ruleType))) return false;
   if (rule.matrixDetailUnavailable === true || !Array.isArray(rule.conditions)) return false;
@@ -236,7 +256,9 @@ export function isMatrixCompatibleRule(rule, columns = []) {
     const column = available.get(condition.variableCode);
     if (!columnOperatorCodes(column).includes(condition.operatorCode)) return false;
     if (column?.matrixType === "option" || column?.matrixType === "boolean") {
-      if (condition.operatorCode !== "EQ" || compareValue.includes(",") || !activeOption(column, compareValue)) return false;
+      const values = splitCellValues(compareValue);
+      if (!values.length || (condition.operatorCode === "EQ" && values.length !== 1)) return false;
+      if (!values.every((value) => activeOption(column, value))) return false;
     }
     if (column?.matrixType === "number" && !isStrictFiniteDecimal(compareValue)) return false;
     if (column?.matrixType === "text" && condition.operatorCode !== "EQ") return false;
@@ -257,7 +279,9 @@ export function normalizeMatrixCell(value) {
   }
   return {
     operatorCode,
-    value: rawValue === undefined || rawValue === null ? "" : String(rawValue),
+    value: operatorCode === "IN" || operatorCode === "NOT_IN"
+      ? splitCellValues(rawValue).join(",")
+      : rawValue === undefined || rawValue === null ? "" : String(rawValue),
   };
 }
 
@@ -422,8 +446,14 @@ function cellsOverlap(left, right, column) {
   const rightCell = cellFor(right, column);
   if (column?.matrixType === "number") return intervalsOverlap(numericInterval(leftCell), numericInterval(rightCell));
   if (isWildcardCell(leftCell) || isWildcardCell(rightCell)) return true;
-  // Matrix option/text/boolean cells are EQ-only. Unknown operators fail
-  // closed and remain conflicting until they are repaired in advanced mode.
+  if (column?.matrixType === "option" || column?.matrixType === "boolean") {
+    const leftValues = optionValueSet(leftCell);
+    const rightValues = optionValueSet(rightCell);
+    if (!leftValues || !rightValues) return true;
+    return [...leftValues].some((value) => rightValues.has(value));
+  }
+  // Text cells are EQ-only. Unknown operators fail closed and remain
+  // conflicting until they are repaired in advanced mode.
   if (leftCell.operatorCode !== "EQ" || rightCell.operatorCode !== "EQ") return true;
   return leftCell.value === rightCell.value;
 }
@@ -436,6 +466,8 @@ function cellSignature(value) {
   const cell = normalizeMatrixCell(value);
   return isWildcardCell(cell)
     ? MATRIX_WILDCARD_VALUE
+    : (cell.operatorCode === "EQ" || cell.operatorCode === "IN")
+      ? `SET:${splitCellValues(cell.value).sort().join(",")}`
     : `${cell.operatorCode}:${cell.value}`;
 }
 
@@ -494,7 +526,7 @@ export function validateMatrixRows(rows = [], columns = []) {
       }
       if ((column.matrixType === "option" || column.matrixType === "boolean")
         && options.length
-        && !activeOption(column, cell.value)) {
+        && !splitCellValues(cell.value).every((value) => activeOption(column, value))) {
         errors.push({
           code: "STALE_OPTION",
           rowIndexes: [index],

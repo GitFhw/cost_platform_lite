@@ -19,6 +19,8 @@ public final class CostExecutionConstants {
     public static final String OP_NOT_IN = "NOT_IN";
     public static final String OP_BETWEEN = "BETWEEN";
     public static final String OP_EXPR = "EXPR";
+    public static final String OP_IS_NULL = "IS_NULL";
+    public static final String OP_IS_NOT_NULL = "IS_NOT_NULL";
 
     private CostExecutionConstants() {
     }

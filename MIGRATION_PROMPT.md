@@ -107,12 +107,12 @@ cost:
 
 ### 4.2 数据库初始化
 
-根据数据库类型默认只执行一份轻量初始化脚本：
+仅当用户声明“同库版本”时，才在宿主业务库执行一份与数据库类型匹配的轻量初始化脚本：
 
 - MySQL：`Mysql/sql/cost-lite-schema.sql`
 - Oracle：`Oracle/sql/cost-lite-schema.sql`
 
-默认脚本只创建工作台、发布、试算日志/结果和页面字典所需的母体表。若业务后端明确需要正式任务、正式结果追溯、重算/告警或 OpenApp，再在同一个目标库执行对应的可选脚本：
+默认脚本只创建工作台、发布、试算日志/结果和页面字典所需的母体表。分离版本的宿主业务库跳过本节脚本，独立核算库由计费服务部署流程负责。若同库版本的业务后端明确需要正式任务、正式结果追溯、重算/告警或 OpenApp，再在同一个业务库执行对应的可选脚本：
 
 - MySQL：`Mysql/sql/cost-lite-formal-schema.sql`
 - Oracle：`Oracle/sql/cost-lite-formal-schema.sql`
@@ -127,16 +127,21 @@ cost:
 - 先备份并检查外键、索引、字符集、大小写规则和已有表结构。
 - 试算日志与试算结果必须保留在母体已有的 `cost_simulation_record` JSON 字段中；不得另造结果表。
 
-数据库落位由实施人员二选一，迁移工具不得擅自创建数据库、切换 Schema 或修改业务表：
+数据库落位由实施人员二选一，执行前必须明确用户提供的是“分离版本”还是“同库版本”；迁移工具不得擅自创建数据库、切换 Schema 或修改业务表：
 
 ```text
-独立库：创建专用 MySQL database 或 Oracle schema，连接该目标库后执行对应 SQL，Jar 指向该库。
-业务库同库：连接客户业务库执行同一份 SQL，Jar 的 JDBC URL、账号和密码指向该业务库；宿主原有业务数据源无需迁移。
+分离版本：宿主业务库不执行任何 cost_* 初始化脚本；计费服务指向已部署的独立核算库。独立核算库为空时，按计费服务部署流程初始化，不作为业务项目改造内容。
+同库版本：连接客户业务库执行对应 SQL，Starter 复用宿主 DataSource；宿主原有业务表无需迁移。
 ```
 
-MySQL 可执行：`mysql -h <host> -P <port> -u <user> -p <database> < Mysql/sql/cost-lite-schema.sql`。
-Oracle 可使用 SQL*Plus/SQLcl 登录目标 Schema 后执行：`@Oracle/sql/cost-lite-schema.sql`。
+只有同库版本可以在业务库执行：MySQL 可执行 `mysql -h <host> -P <port> -u <user> -p <database> < Mysql/sql/cost-lite-schema.sql`；Oracle 可使用 SQL*Plus/SQLcl 登录目标 Schema 后执行 `@Oracle/sql/cost-lite-schema.sql`。分离版本的业务库禁止执行这两类核算初始化脚本。
 执行前必须备份并检查同名 `cost_*`、`sys_dict_type`、`sys_dict_data` 表；脚本不是覆盖式升级脚本，不得在生产库直接覆盖已有表。
+
+### 4.2.1 类型化规则与动态矩阵约定
+
+迁移时不得把规则比较值一律改成文本输入。目标宿主至少要把要素编码、数据类型、来源类型、字典类型/选项来源和选项查询能力映射到 `CostLiteApi`：平台/业务字典使用下拉编码，`IN` 支持多选；数值使用数字输入和按行操作符；文本使用文本输入；布尔使用是/否；日期、日期时间、每日时刻使用对应控件和类型化比较。日期时间和跨午夜时段保留在高级规则，动态矩阵只承载低基数、可审计的类型。
+
+动态矩阵的可用操作符不是固定等于：字典允许 `EQ/IN`，数值允许 `EQ/GT/GE/LT/LE`，布尔和文本采用收敛后的安全语义；复杂 `NE/NOT_IN/BETWEEN/IS_NULL` 或时间窗口通过高级规则维护。服务端保存、预演、发布和正式运行必须使用同一套类型化校验与比较器，不能只依赖前端下拉。
 
 ### 4.3 宿主接口和前端路径
 

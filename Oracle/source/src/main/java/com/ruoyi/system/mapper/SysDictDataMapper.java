@@ -30,6 +30,17 @@ public interface SysDictDataMapper {
     public List<SysDictData> selectDictDataByType(String dictType);
 
     /**
+     * 根据字典类型查询全部状态的字典数据。
+     *
+     * <p>仅用于规则编辑器历史值回显；新增规则的合法性校验仍使用
+     * {@link #selectDictDataByType(String)}，避免停用字典值重新进入业务。</p>
+     *
+     * @param dictType 字典类型
+     * @return 字典数据集合信息
+     */
+    public List<SysDictData> selectAllDictDataByType(String dictType);
+
+    /**
      * 根据字典类型和字典键值查询字典数据信息
      *
      * @param dictType  字典类型

@@ -17,6 +17,8 @@ import com.ruoyi.system.domain.vo.CostRuleTierPreviewVo;
 import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostRuleService;
+import com.ruoyi.system.service.cost.dictionary.CostDictionaryProvider;
+import com.ruoyi.system.service.cost.execution.CostConditionValueSupport;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -77,6 +79,9 @@ public class CostRuleServiceImpl implements ICostRuleService {
 
     @Autowired
     private ICostExpressionService expressionService;
+
+    @Autowired
+    private CostDictionaryProvider dictionaryProvider;
 
     @Autowired
     private CostGovernanceImpactSupport governanceImpactSupport;
@@ -260,7 +265,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
         result.setQuantityVariableName(quantityVariable == null ? null : quantityVariable.getVariableName());
         result.setInputValues(buildPreviewInputEcho(involvedCodes, variableMetaMap, normalizedInputs));
 
-        PreviewConditionResult conditionResult = evaluatePreviewConditions(rule, normalizedInputs);
+        PreviewConditionResult conditionResult = evaluatePreviewConditions(rule, normalizedInputs, variableMetaMap);
         result.setConditionMatched(conditionResult.conditionMatched);
         result.setMatchedGroupNo(conditionResult.matchedGroupNo);
         result.setConditionResults(conditionResult.conditionResults);
@@ -650,10 +655,11 @@ public class CostRuleServiceImpl implements ICostRuleService {
             if (StringUtils.isEmpty(condition.getOperatorCode())) {
                 throw new ServiceException(String.format("第%1$d条条件未选择操作符", index));
             }
-            condition.setCompareValue(normalizeCompareValue(condition.getCompareValue(), condition.getOperatorCode()));
-            if (requiresCompareValue(condition.getOperatorCode()) && StringUtils.isEmpty(String.valueOf(condition.getCompareValue()))) {
-                throw new ServiceException(String.format("第%1$d条条件未填写条件值", index));
-            }
+            CostVariable variable = getSceneVariable(sceneId, condition.getVariableCode(), String.format("第%1$d条条件变量", index));
+            String operatorCode = StringUtils.trim(condition.getOperatorCode()).toUpperCase(Locale.ROOT);
+            condition.setOperatorCode(operatorCode);
+            condition.setCompareValue(normalizeCompareValue(condition.getCompareValue(), operatorCode));
+            validateConditionSemantics(variable, condition, index);
             condition.setSceneId(sceneId);
             condition.setGroupNo(condition.getGroupNo() == null ? 1 : condition.getGroupNo());
             condition.setSortNo(condition.getSortNo() == null ? index : condition.getSortNo());
@@ -770,7 +776,56 @@ public class CostRuleServiceImpl implements ICostRuleService {
      * 判断条件操作符是否要求填写比较值。
      */
     private boolean requiresCompareValue(String operatorCode) {
-        return !Arrays.asList("IS_NULL", "IS_NOT_NULL").contains(StringUtils.isEmpty(operatorCode) ? "" : operatorCode.toUpperCase());
+        return CostConditionValueSupport.requiresCompareValue(operatorCode);
+    }
+
+    /**
+     * 按变量元数据校验操作符和值，确保保存、预演和运行链不会出现不同语义。
+     */
+    private void validateConditionSemantics(CostVariable variable, CostRuleCondition condition, int index) {
+        CostConditionValueSupport.ValueKind kind = CostConditionValueSupport.classify(
+                variable.getVariableType(), variable.getSourceType(), variable.getOptionSourceType(),
+                variable.getDictType(), variable.getDataType());
+        if (!CostConditionValueSupport.isOperatorAllowed(condition.getOperatorCode(), kind)) {
+            throw new ServiceException(String.format("第%1$d条条件的操作符[%2$s]不适用于变量[%3$s]，支持：%4$s",
+                    index, condition.getOperatorCode(), variable.getVariableName(),
+                    CostConditionValueSupport.allowedOperators(kind)));
+        }
+        if (requiresCompareValue(condition.getOperatorCode())
+                && (condition.getCompareValue() == null
+                || StringUtils.isEmpty(String.valueOf(condition.getCompareValue()).trim()))) {
+            throw new ServiceException(String.format("第%1$d条条件未填写条件值", index));
+        }
+        if (!CostConditionValueSupport.isValidCompareValue(condition.getCompareValue(), condition.getOperatorCode(),
+                variable.getDataType(), variable.getVariableType(), variable.getSourceType(),
+                variable.getOptionSourceType(), variable.getDictType())) {
+            throw new ServiceException(String.format("第%1$d条条件值与变量[%2$s]的数据类型不匹配",
+                    index, variable.getVariableName()));
+        }
+        validatePlatformDictionaryValues(variable, condition, index);
+    }
+
+    private void validatePlatformDictionaryValues(CostVariable variable, CostRuleCondition condition, int index) {
+        String optionSourceType = StringUtils.trim(variable.getOptionSourceType());
+        boolean platformDictionary = "PLATFORM_DICT".equalsIgnoreCase(optionSourceType)
+                || (StringUtils.isEmpty(optionSourceType) && "DICT".equalsIgnoreCase(variable.getSourceType()));
+        if (!platformDictionary || !CostConditionValueSupport.requiresCompareValue(condition.getOperatorCode())) {
+            return;
+        }
+        if (StringUtils.isEmpty(variable.getDictType())) {
+            throw new ServiceException(String.format("第%1$d条条件引用平台字典，但变量[%2$s]未配置字典类型",
+                    index, variable.getVariableName()));
+        }
+        if (!dictionaryProvider.containsType(variable.getDictType())) {
+            throw new ServiceException(String.format("第%1$d条条件引用的字典类型[%2$s]不存在",
+                    index, variable.getDictType()));
+        }
+        for (String value : CostConditionValueSupport.splitValues(condition.getCompareValue())) {
+            if (!dictionaryProvider.containsValue(variable.getDictType(), value)) {
+                throw new ServiceException(String.format("第%1$d条条件值[%2$s]不在启用字典[%3$s]中",
+                        index, value, variable.getDictType()));
+            }
+        }
     }
 
     /**
@@ -909,7 +964,8 @@ public class CostRuleServiceImpl implements ICostRuleService {
     /**
      * 评估当前样本是否通过规则条件，并输出逐条解释。
      */
-    private PreviewConditionResult evaluatePreviewConditions(CostRuleSaveBo rule, Map<String, Object> inputValues) {
+    private PreviewConditionResult evaluatePreviewConditions(CostRuleSaveBo rule, Map<String, Object> inputValues,
+                                                             Map<String, CostVariable> variableMetaMap) {
         PreviewConditionResult result = new PreviewConditionResult();
         if (rule.getConditions() == null || rule.getConditions().isEmpty()) {
             result.conditionMatched = true;
@@ -926,7 +982,8 @@ public class CostRuleServiceImpl implements ICostRuleService {
             boolean groupPass = true;
             for (CostRuleCondition condition : entry.getValue()) {
                 Object leftValue = inputValues.get(condition.getVariableCode());
-                boolean pass = evaluatePreviewCondition(condition, leftValue, inputValues);
+                boolean pass = evaluatePreviewCondition(condition, leftValue, inputValues,
+                        variableMetaMap == null ? null : variableMetaMap.get(condition.getVariableCode()));
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("groupNo", entry.getKey());
                 item.put("variableCode", condition.getVariableCode());
@@ -960,52 +1017,19 @@ public class CostRuleServiceImpl implements ICostRuleService {
     /**
      * 按运行链口径执行单条条件比较。
      */
-    private boolean evaluatePreviewCondition(CostRuleCondition condition, Object leftValue, Map<String, Object> inputValues) {
+    private boolean evaluatePreviewCondition(CostRuleCondition condition, Object leftValue, Map<String, Object> inputValues,
+                                             CostVariable variable) {
         String operatorCode = StringUtils.isEmpty(condition.getOperatorCode()) ? "" : condition.getOperatorCode().toUpperCase();
-        if ("IS_NULL".equals(operatorCode)) {
-            return leftValue == null || StringUtils.isEmpty(String.valueOf(leftValue));
-        }
-        if ("IS_NOT_NULL".equals(operatorCode)) {
-            return leftValue != null && StringUtils.isNotEmpty(String.valueOf(leftValue));
-        }
         if ("EXPR".equals(operatorCode)) {
             Object exprResult = expressionService.evaluate(condition.getCompareValue(), buildPreviewExpressionContext(inputValues));
             return Boolean.TRUE.equals(convertPreviewBoolean(exprResult));
         }
-        if ("IN".equals(operatorCode) || "NOT_IN".equals(operatorCode)) {
-            List<String> values = splitCompareValues(condition.getCompareValue());
-            boolean contains = values.contains(String.valueOf(leftValue));
-            return "IN".equals(operatorCode) ? contains : !contains;
+        if (variable == null) {
+            return false;
         }
-        if ("BETWEEN".equals(operatorCode)) {
-            List<String> values = splitCompareValues(condition.getCompareValue());
-            if (values.size() < 2) {
-                return false;
-            }
-            BigDecimal current = toBigDecimal(leftValue);
-            BigDecimal start = toBigDecimal(values.get(0));
-            BigDecimal end = toBigDecimal(values.get(1));
-            return current != null && start != null && end != null
-                    && current.compareTo(start) >= 0 && current.compareTo(end) <= 0;
-        }
-        BigDecimal leftNumber = toBigDecimal(leftValue);
-        BigDecimal rightNumber = toBigDecimal(condition.getCompareValue());
-        switch (operatorCode) {
-            case "EQ":
-                return Objects.equals(String.valueOf(leftValue), String.valueOf(condition.getCompareValue()));
-            case "NE":
-                return !Objects.equals(String.valueOf(leftValue), String.valueOf(condition.getCompareValue()));
-            case "GT":
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) > 0;
-            case "GE":
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) >= 0;
-            case "LT":
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) < 0;
-            case "LE":
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) <= 0;
-            default:
-                return false;
-        }
+        return CostConditionValueSupport.matches(leftValue, condition.getCompareValue(), operatorCode,
+                variable.getDataType(), variable.getVariableType(), variable.getSourceType(),
+                variable.getOptionSourceType(), variable.getDictType());
     }
 
     /**
@@ -1144,14 +1168,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
         }
         String upperOperator = StringUtils.isEmpty(operatorCode) ? "" : operatorCode.toUpperCase();
         if (Arrays.asList("IN", "NOT_IN", "BETWEEN").contains(upperOperator)) {
-            List<String> items = new ArrayList<>();
-            for (String piece : normalized.split(",")) {
-                String item = StringUtils.trim(piece);
-                if (StringUtils.isNotEmpty(item)) {
-                    items.add(item);
-                }
-            }
-            return String.join(",", items);
+            return String.join(",", CostConditionValueSupport.splitValues(normalized));
         }
         return normalized;
     }

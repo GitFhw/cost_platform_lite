@@ -116,10 +116,13 @@ public class CostLiteVariableOptionController extends CostLiteControllerSupport 
             throw new ServiceException("平台字典选项必须使用 cost_ 前缀字典");
         }
         String normalizedKeyword = StringUtils.defaultIfEmpty(StringUtils.trim(keyword), "").toLowerCase(Locale.ROOT);
-        List<SysDictData> sourceRows = dictDataMapper.selectDictDataByType(dictType);
+        // 历史规则可能仍引用已停用编码；返回全量并由前端置灰，新增保存仍由服务端校验启用状态。
+        String storageDictType = properties.getDictionary().resolveType(dictType);
+        List<SysDictData> sourceRows = dictDataMapper.selectAllDictDataByType(storageDictType);
         List<CostLiteOption> rows = new ArrayList<>();
         if (sourceRows != null) {
-            Collections.sort(sourceRows, new Comparator<SysDictData>() {
+            List<SysDictData> sortedRows = new ArrayList<>(sourceRows);
+            Collections.sort(sortedRows, new Comparator<SysDictData>() {
                 @Override
                 public int compare(SysDictData left, SysDictData right) {
                     if (left == null) return right == null ? 0 : 1;
@@ -132,16 +135,20 @@ public class CostLiteVariableOptionController extends CostLiteControllerSupport 
                             .compareTo(StringUtils.defaultIfEmpty(right.getDictValue(), ""));
                 }
             });
-            for (SysDictData row : sourceRows) {
+            for (SysDictData row : sortedRows) {
                 if (row == null) {
                     continue;
                 }
                 if (!normalizedKeyword.isEmpty()
                         && !containsIgnoreCase(row.getDictLabel(), normalizedKeyword)
-                        && !containsIgnoreCase(row.getDictValue(), normalizedKeyword)) {
+                        && !containsIgnoreCase(row.getDictValue(), normalizedKeyword)
+                        && !containsIgnoreCase(properties.getDictionary()
+                        .resolveCanonicalValue(dictType, row.getDictValue()), normalizedKeyword)) {
                     continue;
                 }
-                CostLiteOption option = new CostLiteOption(row.getDictValue(), row.getDictLabel());
+                CostLiteOption option = new CostLiteOption(
+                        properties.getDictionary().resolveCanonicalValue(dictType, row.getDictValue()),
+                        row.getDictLabel());
                 option.setDisabled(StringUtils.isNotEmpty(row.getStatus()) && !"0".equals(row.getStatus()));
                 rows.add(option);
             }

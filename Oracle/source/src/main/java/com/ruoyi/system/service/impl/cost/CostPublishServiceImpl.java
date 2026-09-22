@@ -559,6 +559,8 @@ public class CostPublishServiceImpl implements ICostPublishService {
             json.put("sourceType", variable.getSourceType());
             json.put("sourceSystem", variable.getSourceSystem());
             json.put("dictType", variable.getDictType());
+            json.put("optionSourceType", variable.getOptionSourceType());
+            json.put("optionSourceCode", variable.getOptionSourceCode());
             json.put("remoteApi", variable.getRemoteApi());
             json.put("authType", variable.getAuthType());
             json.put("authConfigJson", variable.getAuthConfigJson());

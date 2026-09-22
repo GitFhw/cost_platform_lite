@@ -1,7 +1,7 @@
 <template>
   <div class="rate-matrix-editor">
     <el-alert
-      title="动态列按要素类型渲染：字典/布尔使用选项，数值使用严格十进制和行级操作符，文本使用文本输入；“全部（不限）”不会生成条件。日期、时间区间、阶梯、公式和高基数字典请在高级规则中维护。"
+      title="动态列按要素类型渲染：字典支持等于/属于任一多选，布尔使用选项，数值使用严格十进制和行级操作符，文本使用文本输入；“全部（不限）”不会生成条件。日期、时间区间、阶梯、公式和高基数字典请在高级规则中维护。"
       type="info"
       :closable="false"
       show-icon
@@ -79,13 +79,16 @@
 
             <el-select
               v-if="column.matrixType === 'option' || column.matrixType === 'boolean'"
-              :model-value="cellValue(row, column)"
+              :model-value="cellEditorValue(row, column)"
               filterable
+              :multiple="isMultiValueOperator(row, column)"
+              collapse-tags
+              collapse-tags-tooltip
               :teleported="false"
               v-hasPermi="['cost:lite:rule:write', 'cost:lite:manage']"
               @update:model-value="setCellValue(row, column, $event)"
             >
-              <el-option label="全部（不限）" :value="MATRIX_WILDCARD_VALUE" />
+              <el-option v-if="!isMultiValueOperator(row, column)" label="全部（不限）" :value="MATRIX_WILDCARD_VALUE" />
               <el-option
                 v-for="option in column.options || []"
                 :key="`${column.variableCode}-${option.value}`"
@@ -198,6 +201,21 @@ function cellValue(row: MatrixRow, column: MatrixColumn): string {
   return cellState(row, column).value;
 }
 
+function splitCellValues(value: unknown): string[] {
+  const rawValues = Array.isArray(value) ? value : String(value ?? "").split(",");
+  return [...new Set(rawValues.map(item => String(item ?? "").trim()).filter(Boolean))];
+}
+
+function isMultiValueOperator(row: MatrixRow, column: MatrixColumn): boolean {
+  return cellState(row, column).operatorCode === "IN"
+    && column.matrixType === "option";
+}
+
+function cellEditorValue(row: MatrixRow, column: MatrixColumn): string | string[] {
+  const cell = cellState(row, column);
+  return isMultiValueOperator(row, column) ? splitCellValues(cell.value) : cell.value;
+}
+
 function operatorValue(row: MatrixRow, column: MatrixColumn): string {
   const cell = cellState(row, column);
   return cell.operatorCode === MATRIX_WILDCARD_OPERATOR ? (column.operators?.[0]?.value || "EQ") : cell.operatorCode;
@@ -206,7 +224,9 @@ function operatorValue(row: MatrixRow, column: MatrixColumn): string {
 function setCellValue(row: MatrixRow, column: MatrixColumn, value: unknown): void {
   if (!row.cells) row.cells = {};
   const current = cellState(row, column);
-  const nextValue = value === undefined || value === null ? "" : String(value);
+  const nextValue = Array.isArray(value)
+    ? splitCellValues(value).join(",")
+    : value === undefined || value === null ? "" : String(value);
   row.cells[column.variableCode] = nextValue === MATRIX_WILDCARD_VALUE
     ? { operatorCode: MATRIX_WILDCARD_OPERATOR, value: MATRIX_WILDCARD_VALUE }
     : { operatorCode: current.operatorCode === MATRIX_WILDCARD_OPERATOR ? "EQ" : current.operatorCode, value: nextValue };
@@ -217,9 +237,15 @@ function setOperator(row: MatrixRow, column: MatrixColumn, value: unknown): void
   if (!row.cells) row.cells = {};
   const current = cellState(row, column);
   const operatorCode = String(value || "EQ").toUpperCase();
+  const currentValues = splitCellValues(current.value);
+  const nextValue = current.value === MATRIX_WILDCARD_VALUE
+    ? ""
+    : operatorCode === "IN"
+      ? currentValues.join(",")
+      : currentValues[0] || "";
   row.cells[column.variableCode] = {
     operatorCode,
-    value: current.value === MATRIX_WILDCARD_VALUE ? "" : current.value,
+    value: nextValue,
   };
   emit("change", row);
 }
@@ -260,7 +286,9 @@ function isStaleValue(row: MatrixRow, column: MatrixColumn): boolean {
   return value !== MATRIX_WILDCARD_VALUE
     && value !== ""
     && Boolean(column.options?.length)
-    && !column.options.some((option) => String(option.value) === value && option.disabled !== true);
+    && !splitCellValues(value).every(item => column.options.some(
+      option => String(option.value) === item && option.disabled !== true,
+    ));
 }
 
 function priceValue(row: MatrixRow): number | undefined {

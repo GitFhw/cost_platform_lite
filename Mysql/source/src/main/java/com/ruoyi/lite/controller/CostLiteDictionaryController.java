@@ -43,7 +43,9 @@ public class CostLiteDictionaryController extends CostLiteControllerSupport {
         Map<String, List<Map<String, Object>>> result = new LinkedHashMap<>();
         for (String dictType : requestedTypes) {
             List<Map<String, Object>> options = new ArrayList<>();
-            List<SysDictData> rows = dictDataMapper.selectDictDataByType(dictType);
+            String storageDictType = properties.getDictionary().resolveType(dictType);
+            // 下拉既承担新增规则选项，也承担历史规则回显；停用项必须返回但只能置灰。
+            List<SysDictData> rows = dictDataMapper.selectAllDictDataByType(storageDictType);
             if (rows != null) {
                 for (SysDictData row : rows) {
                     if (row == null) {
@@ -51,7 +53,8 @@ public class CostLiteDictionaryController extends CostLiteControllerSupport {
                     }
                     Map<String, Object> option = new LinkedHashMap<>();
                     option.put("label", row.getDictLabel());
-                    option.put("value", row.getDictValue());
+                    option.put("value", properties.getDictionary()
+                            .resolveCanonicalValue(dictType, row.getDictValue()));
                     String status = row.getStatus();
                     if (status != null && !status.trim().isEmpty() && !"0".equals(status)) {
                         // Keep the historical code visible for audit/editing, but make
